@@ -6,12 +6,12 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const GRADIENTS = [
-  "from-[#6366F1] to-[#8B5CF6]",
-  "from-[#3B82F6] to-[#06B6D4]",
-  "from-[#10B981] to-[#059669]",
-  "from-[#F59E0B] to-[#D97706]",
-  "from-[#EF4444] to-[#F43F5E]",
-  "from-[#8B5CF6] to-[#6366F1]",
+  "linear-gradient(135deg, #6366F1, #8B5CF6)",
+  "linear-gradient(135deg, #3B82F6, #06B6D4)",
+  "linear-gradient(135deg, #10B981, #059669)",
+  "linear-gradient(135deg, #F59E0B, #D97706)",
+  "linear-gradient(135deg, #EF4444, #F43F5E)",
+  "linear-gradient(135deg, #8B5CF6, #6366F1)",
 ];
 
 export default function StudentSubjectsPage() {
@@ -19,7 +19,7 @@ export default function StudentSubjectsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axiosClient.get("/student/subjects")
+    axiosClient.get("/students/me/subjects")
       .then(res => setSubjects(Array.isArray(res.data) ? res.data : []))
       .catch(() => toast.error("Failed to load subjects"))
       .finally(() => setLoading(false));
@@ -49,26 +49,29 @@ export default function StudentSubjectsPage() {
             const gradient     = GRADIENTS[i % GRADIENTS.length];
 
             return (
-              <div key={cs.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className={cn("h-1.5 bg-gradient-to-r", gradient)} />
-                <div className="p-5">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={cn("w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center shrink-0", gradient)}>
-                      <BookOpen size={18} className="text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-800 truncate">{subjectName}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{grade} {className}</p>
-                    </div>
+              <div
+                key={cs.id}
+                className="rounded-2xl shadow-md hover:shadow-xl transition-all relative overflow-hidden text-white"
+                style={{ background: gradient }}
+              >
+                <div className="absolute -right-5 -bottom-5 w-24 h-24 rounded-full bg-white/10" />
+                <div className="absolute -right-2 -top-4 w-16 h-16 rounded-full bg-white/10" />
+                <div className="relative z-10 p-5">
+                  <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center mb-4">
+                    <BookOpen size={18} className="text-white" />
                   </div>
+                  <p className="font-bold text-white text-base truncate">{subjectName}</p>
+                  {(grade || className) && (
+                    <p className="text-xs text-white/70 mt-0.5">{grade} {className}</p>
+                  )}
                   {teacher && (
-                    <div className="flex items-center gap-2 p-2.5 bg-[#F4F7FE] rounded-xl">
-                      <GraduationCap size={13} className="text-[#6366F1] shrink-0" />
-                      <p className="text-xs font-semibold text-gray-600 truncate">Teacher: {teacher}</p>
+                    <div className="flex items-center gap-1.5 mt-3 bg-white/15 rounded-xl px-3 py-2">
+                      <GraduationCap size={12} className="text-white/80 shrink-0" />
+                      <p className="text-xs font-semibold text-white/90 truncate">{teacher}</p>
                     </div>
                   )}
                   {cs.description && (
-                    <p className="text-xs text-gray-400 mt-3 line-clamp-2">{cs.description}</p>
+                    <p className="text-xs text-white/60 mt-3 line-clamp-2">{cs.description}</p>
                   )}
                 </div>
               </div>

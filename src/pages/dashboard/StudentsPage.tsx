@@ -42,7 +42,8 @@ export default function StudentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<StudentItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [classError, setClassError] = useState(false);
 
 
 
@@ -70,15 +71,17 @@ const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const openCreate = () => {
     setEditTarget(null);
     setForm(EMPTY_FORM);
-      setAvatarFile(null);       
-  setAvatarPreview(null); 
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    setClassError(false);
     setModalOpen(true);
   };
 
- const openEdit = (student: StudentItem) => {
+  const openEdit = (student: StudentItem) => {
   setEditTarget(student);
   setAvatarFile(null);
   setAvatarPreview(null);
+  setClassError(false);
   setForm({
     firstName: student.user.firstName,
     lastName: student.user.lastName,
@@ -104,7 +107,8 @@ const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
       return;
     }
     if (!form.classId) {
-      toast.error("Class is required");
+      setClassError(true);
+      toast.error("Class is required — every student must be enrolled in a class");
       return;
     }
 
@@ -549,36 +553,36 @@ const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
                       Class <span className="text-rose-500">*</span>
                     </Label>
                     <Select
-                      value={form.classId || "none"}
-                      onValueChange={val => setForm({ ...form, classId: val === "none" ? "" : val })}
+                      value={form.classId}
+                      onValueChange={val => { setForm({ ...form, classId: val }); setClassError(false); }}
                     >
-                      <SelectTrigger className="h-10 border-gray-200 rounded-xl w-full">
-                        <SelectValue placeholder="Select class" />
+                      <SelectTrigger className={cn(
+                        "h-10 rounded-xl w-full",
+                        classError
+                          ? "border-rose-400 ring-1 ring-rose-400"
+                          : "border-gray-200"
+                      )}>
+                        <SelectValue placeholder="Select class (required)" />
                       </SelectTrigger>
                       <SelectContent className="z-[200] bg-white border border-gray-100 shadow-xl max-h-[250px]">
-                        <SelectItem value="none" className="text-gray-400 italic">
-                          Unassigned
-                        </SelectItem>
                         {[...classes]
                           .sort((a, b) => (a.grade?.level || 0) - (b.grade?.level || 0))
                           .map(cls => (
                             <SelectItem key={cls.id} value={cls.id}>
-                  <div className="flex items-center gap-2">
-                    {/* Keep full grade text */}
-                    <span className="font-semibold text-gray-700">
-                      {cls.grade?.label}
-                    </span>
-
-                    {/* Badge should be 7A instead of A */}
-                    <span className="text-xs font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded uppercase">
-                      {cls.grade?.level}{cls.name}
-                    </span>
-                  </div>
-                </SelectItem>
-                                          ))
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-700">{cls.grade?.label}</span>
+                                <span className="text-xs font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded uppercase">
+                                  {cls.grade?.level}{cls.name}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))
                         }
                       </SelectContent>
                     </Select>
+                    {classError && (
+                      <p className="text-[11px] text-rose-500 ml-1">A class must be selected to enroll this student</p>
+                    )}
                   </div>
 
                   {/* Parent */}

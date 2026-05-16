@@ -16,7 +16,7 @@ export default function StudentHomeworkPage() {
   const [submitting,     setSubmitting]     = useState(false);
 
   useEffect(() => {
-    axiosClient.get("/student/homework")
+    axiosClient.get("/students/me/homework")
       .then(res => setHomework(Array.isArray(res.data) ? res.data : []))
       .catch(() => toast.error("Failed to load homework"))
       .finally(() => setLoading(false));
@@ -35,7 +35,7 @@ export default function StudentHomeworkPage() {
       const fd = new FormData();
       if (submitComment.trim()) fd.append("comment", submitComment.trim());
       if (submitFile) fd.append("file", submitFile);
-      await axiosClient.post(`/student/homework/${submitModal.id}/submit`, fd);
+      await axiosClient.post(`/students/me/homework/${submitModal.id}/submit`, fd);
       toast.success("Homework submitted!");
       setHomework(prev => prev.map(h => h.id === submitModal.id ? { ...h, submitted: true } : h));
       closeModal();
@@ -69,6 +69,7 @@ export default function StudentHomeworkPage() {
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Due Date</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Max Marks</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Status</th>
+                  <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Mark</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Action</th>
                 </tr>
               </thead>
@@ -77,6 +78,8 @@ export default function StudentHomeworkPage() {
                   const isOverdue = hw.dueDate && new Date(hw.dueDate) < new Date();
                   const submitted = hw.submitted || !!hw.submission;
                   const subject   = hw.classSubject?.subject?.name ?? hw.subject?.name ?? "—";
+                  const marks     = hw.submission?.marks ?? hw.marks ?? null;
+                  const maxMarks  = hw.maxMarks ?? null;
 
                   return (
                     <tr key={hw.id} className="hover:bg-[#F4F7FE]/50 transition-colors">
@@ -106,6 +109,15 @@ export default function StudentHomeworkPage() {
                         )}>
                           {submitted ? "Submitted" : isOverdue ? "Overdue" : "Pending"}
                         </span>
+                      </td>
+                      <td className="px-6 py-3.5">
+                        {marks !== null ? (
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#6366F1]/10 text-[#6366F1]">
+                            {marks}{maxMarks ? ` / ${maxMarks}` : ""}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300 font-medium">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-3.5">
                         {submitted ? (

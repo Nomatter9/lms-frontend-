@@ -12,12 +12,22 @@ const scoreStyle = (marks: number, max: number) => {
   return           { badge: "bg-rose-100 text-rose-600",           bar: "bg-rose-400" };
 };
 
+const getGrade = (marks: number, max: number) => {
+  const pct = max > 0 ? (marks / max) * 100 : 0;
+  if (pct >= 80) return { grade: "A", color: "text-emerald-700 bg-emerald-100" };
+  if (pct >= 70) return { grade: "B", color: "text-blue-700 bg-blue-100" };
+  if (pct >= 60) return { grade: "C", color: "text-amber-700 bg-amber-100" };
+  if (pct >= 50) return { grade: "D", color: "text-orange-700 bg-orange-100" };
+  if (pct >= 40) return { grade: "E", color: "text-rose-700 bg-rose-100" };
+  return                { grade: "U", color: "text-gray-700 bg-gray-100" };
+};
+
 export default function StudentResultsPage() {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axiosClient.get("/student/results")
+    axiosClient.get("/students/me/results")
       .then(res => setResults(Array.isArray(res.data) ? res.data : []))
       .catch(() => toast.error("Failed to load results"))
       .finally(() => setLoading(false));
@@ -69,20 +79,24 @@ export default function StudentResultsPage() {
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">#</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Assessment</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Subject</th>
+                  <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Type</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Date</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Score</th>
+                  <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Grade</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Progress</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {results.map((r: any, i: number) => {
-                  const marks   = r.marks ?? r.score ?? 0;
+                  const marks    = r.marks ?? r.score ?? 0;
                   const maxMarks = r.assessment?.maxMarks ?? r.maxMarks ?? 100;
-                  const pct     = maxMarks > 0 ? Math.round((marks / maxMarks) * 100) : 0;
-                  const subject = r.assessment?.classSubject?.subject?.name ?? r.classSubject?.subject?.name ?? r.subject?.name ?? "—";
-                  const title   = r.assessment?.title ?? r.title ?? "—";
-                  const date    = r.assessment?.date ?? r.date ?? null;
-                  const style   = scoreStyle(marks, maxMarks);
+                  const pct      = maxMarks > 0 ? Math.round((marks / maxMarks) * 100) : 0;
+                  const subject  = r.assessment?.classSubject?.subject?.name ?? r.classSubject?.subject?.name ?? r.subject?.name ?? "—";
+                  const title    = r.assessment?.title ?? r.title ?? "—";
+                  const date     = r.assessment?.date ?? r.date ?? null;
+                  const type     = r.assessment?.type ?? r.type ?? null;
+                  const style    = scoreStyle(marks, maxMarks);
+                  const { grade, color } = getGrade(marks, maxMarks);
 
                   return (
                     <tr key={r.id ?? i} className="hover:bg-[#F4F7FE]/50 transition-colors">
@@ -91,6 +105,16 @@ export default function StudentResultsPage() {
                         <p className="text-sm font-semibold text-gray-800">{title}</p>
                       </td>
                       <td className="px-6 py-3.5 text-sm text-gray-500">{subject}</td>
+                      <td className="px-6 py-3.5">
+                        {type ? (
+                          <span className={cn(
+                            "text-xs font-bold px-2.5 py-1 rounded-full uppercase",
+                            type === "ca" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"
+                          )}>
+                            {type}
+                          </span>
+                        ) : <span className="text-gray-300 text-xs">—</span>}
+                      </td>
                       <td className="px-6 py-3.5 text-sm text-gray-500">
                         {date ? date.split("T")[0] : "—"}
                       </td>
@@ -98,6 +122,9 @@ export default function StudentResultsPage() {
                         <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full", style.badge)}>
                           {marks} / {maxMarks}
                         </span>
+                      </td>
+                      <td className="px-6 py-3.5">
+                        <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full", color)}>{grade}</span>
                       </td>
                       <td className="px-6 py-3.5">
                         <div className="flex items-center gap-2.5">

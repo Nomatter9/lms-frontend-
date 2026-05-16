@@ -507,8 +507,8 @@ function StudentView() {
     const load = async () => {
       try {
         const [hwRes, lessonRes] = await Promise.allSettled([
-          axiosClient.get('/student/homework'),
-          axiosClient.get('/student/lessons'),
+          axiosClient.get('/students/me/homework'),
+          axiosClient.get('/students/me/lessons'),
         ]);
         setHomework(hwRes.status     === 'fulfilled' ? safeArray(hwRes.value.data)     : []);
         setLessons(lessonRes.status  === 'fulfilled' ? safeArray(lessonRes.value.data) : []);
@@ -532,7 +532,7 @@ function StudentView() {
       const fd = new FormData();
       if (submitComment.trim()) fd.append("comment", submitComment.trim());
       if (submitFile) fd.append("file", submitFile);
-      await axiosClient.post(`/student/homework/${submitModal.id}/submit`, fd);
+      await axiosClient.post(`/students/me/homework/${submitModal.id}/submit`, fd);
       toast.success("Homework submitted!");
       closeSubmitModal();
     } catch (err: any) {
@@ -543,10 +543,10 @@ function StudentView() {
   };
 
   const QUICK_LINKS = [
-    { label: "My Subjects", href: "/dashboard/student/subjects",  color: "bg-[#6366F1]", icon: BookOpen },
-    { label: "Homework",    href: "/dashboard/student/homework",  color: "bg-[#F59E0B]", icon: ClipboardList },
-    { label: "My Results",  href: "/dashboard/student/results",   color: "bg-[#EF4444]", icon: TrendingUp },
-    { label: "Attendance",  href: "/dashboard/student/attendance",color: "bg-[#3B82F6]", icon: CalendarCheck },
+    { label: "My Subjects", desc: "All subjects you're enrolled in",  href: "/dashboard/student/subjects",   gradient: "linear-gradient(135deg, #6366F1, #8B5CF6)", icon: BookOpen },
+    { label: "Homework",    desc: "View and submit your assignments",  href: "/dashboard/student/homework",   gradient: "linear-gradient(135deg, #F59E0B, #D97706)", icon: ClipboardList },
+    { label: "My Results",  desc: "Assessment scores and marks",       href: "/dashboard/student/results",    gradient: "linear-gradient(135deg, #EF4444, #F43F5E)", icon: TrendingUp },
+    { label: "Attendance",  desc: "Your daily attendance record",      href: "/dashboard/student/attendance", gradient: "linear-gradient(135deg, #3B82F6, #06B6D4)", icon: CalendarCheck },
   ];
 
   return (
@@ -559,15 +559,25 @@ function StudentView() {
       </div>
 
       {/* Quick Links */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {QUICK_LINKS.map(link => (
           <Link key={link.href} to={link.href}
-            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-200 bg-white hover:border-[#6366F1]/30 hover:bg-[#6366F1]/5 transition-all group text-center"
+            className="rounded-2xl p-5 shadow-md hover:shadow-xl transition-all group relative overflow-hidden text-white"
+            style={{ background: link.gradient }}
           >
-            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", link.color)}>
-              <link.icon size={18} className="text-white" />
+            <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-white/10" />
+            <div className="absolute -right-2 -top-4 w-14 h-14 rounded-full bg-white/10" />
+            <div className="relative z-10">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-3">
+                <link.icon size={18} className="text-white" />
+              </div>
+              <p className="font-bold text-white text-sm mb-1">{link.label}</p>
+              <p className="text-xs text-white/70 leading-relaxed">{link.desc}</p>
+              <div className="flex items-center gap-1 mt-3 text-white/80">
+                <span className="text-xs font-semibold">View</span>
+                <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </div>
             </div>
-            <span className="text-xs font-semibold text-gray-600 group-hover:text-[#6366F1]">{link.label}</span>
           </Link>
         ))}
       </div>

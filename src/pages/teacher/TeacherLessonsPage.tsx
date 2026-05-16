@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus, Edit2, Trash2, Search, X, Save, Loader2, BookOpen, Eye, EyeOff } from "lucide-react";
-import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import TeacherLayout from "@/components/dashboard/TeacherLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -141,13 +141,24 @@ export default function TeacherLessonsPage() {
       fd.append("isPublished", String(form.isPublished));
       if (selectedFile) fd.append("file", selectedFile);
 
+      const selectedSubject = subjects.find(s => s.id === form.classSubjectId);
+      const selectedTerm    = terms.find(t => String(t.id) === form.termId);
+
+      const enrich = (data: any) => ({
+        ...data,
+        classSubject: selectedSubject
+          ? { ...(data.classSubject ?? {}), ...selectedSubject }
+          : data.classSubject,
+        term: selectedTerm ?? data.term,
+      });
+
       if (editTarget) {
         const res = await axiosClient.put(`/teacher/lessons/${editTarget.id}`, fd);
-        setLessons(prev => prev.map(l => l.id === editTarget.id ? res.data : l));
+        setLessons(prev => prev.map(l => l.id === editTarget.id ? enrich(res.data) : l));
         toast.success("Lesson updated");
       } else {
         const res = await axiosClient.post("/teacher/lessons", fd);
-        setLessons(prev => [...prev, res.data]);
+        setLessons(prev => [...prev, enrich(res.data)]);
         toast.success("Lesson created");
       }
       setModalOpen(false);
@@ -190,7 +201,7 @@ export default function TeacherLessonsPage() {
   );
 
   return (
-    <DashboardLayout title="Lessons" subtitle="Create and manage lessons for your students">
+    <TeacherLayout title="Lessons" subtitle="Create and manage lessons for your students">
 
       {/* ── Toolbar ── */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -333,8 +344,7 @@ export default function TeacherLessonsPage() {
       </div>
 
       {/* ── Create/Edit Modal ── */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className={cn("fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4", !modalOpen && "hidden")}>
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <h3 className="font-bold text-gray-900">
@@ -512,7 +522,6 @@ export default function TeacherLessonsPage() {
             </div>
           </div>
         </div>
-      )}
 
       {/* ── Delete ── */}
       {deleteTarget && (
@@ -539,6 +548,6 @@ export default function TeacherLessonsPage() {
         </div>
       )}
 
-    </DashboardLayout>
+    </TeacherLayout>
   );
 }

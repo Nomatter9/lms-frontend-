@@ -93,15 +93,37 @@ export default function ClassesPage() {
         teacherId: form.teacherId || null,
         capacity: form.capacity !== "" ? Number(form.capacity) : null,
       };
+      const selectedTeacher = teachers.find((t) => t.id === form.teacherId) ?? null;
+      const newTeacherId = form.teacherId || null;
+      const prevTeacherId = editTarget?.teacherId || null;
+
+      let classId: string;
       if (editTarget) {
         const res = await axiosClient.put(`/classes/${editTarget.id}`, payload);
-        setClasses((prev) => prev.map((c) => c.id === editTarget.id ? res.data : c));
+        classId = editTarget.id;
+        setClasses((prev) => prev.map((c) =>
+          c.id === editTarget.id
+            ? { ...res.data, teacher: selectedTeacher ?? undefined }
+            : c
+        ));
         toast.success("Class updated");
       } else {
         const res = await axiosClient.post("/classes", payload);
-        setClasses((prev) => [...prev, res.data]);
+        classId = res.data.id;
+        setClasses((prev) => [...prev, { ...res.data, teacher: selectedTeacher ?? undefined }]);
         toast.success("Class created");
       }
+
+      // Keep staff.classId in sync so the teacher's dashboard can find this class
+      if (newTeacherId !== prevTeacherId) {
+        if (prevTeacherId) {
+          axiosClient.put(`/auth/staff/${prevTeacherId}`, { classId: null }).catch(() => {});
+        }
+        if (newTeacherId) {
+          axiosClient.put(`/auth/staff/${newTeacherId}`, { classId }).catch(() => {});
+        }
+      }
+
       setModalOpen(false);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to save class");

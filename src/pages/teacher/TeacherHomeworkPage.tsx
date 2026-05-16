@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Plus, Edit2, Trash2, Search, X, Save, Loader2, ClipboardList, Eye, EyeOff } from "lucide-react";
-import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { Plus, Edit2, Trash2, Search, X, Save, Loader2, ClipboardList, Eye, EyeOff, Users, CheckCircle2 } from "lucide-react";
+import TeacherLayout from "@/components/dashboard/TeacherLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,12 @@ export default function TeacherHomeworkPage() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [submissionsModal, setSubmissionsModal] = useState<any>(null);
+  const [submissions, setSubmissions]           = useState<any[]>([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [markValues, setMarkValues]             = useState<Record<string, string>>({});
+  const [markSaving, setMarkSaving]             = useState<Record<string, boolean>>({});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [currentTermId, setCurrentTermId] = useState<string>("");
 
@@ -156,13 +162,24 @@ const openCreate = () => {
       fd.append("isPublished", String(form.isPublished));
       if (selectedFile) fd.append("file", selectedFile);
 
+      const selectedSubject = subjects.find(s => s.id === form.classSubjectId);
+      const selectedTerm    = terms.find(t => String(t.id) === form.termId);
+
+      const enrich = (data: any) => ({
+        ...data,
+        classSubject: selectedSubject
+          ? { ...(data.classSubject ?? {}), ...selectedSubject }
+          : data.classSubject,
+        term: selectedTerm ?? data.term,
+      });
+
       if (editTarget) {
         const res = await axiosClient.put(`/teacher/homework/${editTarget.id}`, fd);
-        setHomework(prev => prev.map(h => h.id === editTarget.id ? res.data : h));
+        setHomework(prev => prev.map(h => h.id === editTarget.id ? enrich(res.data) : h));
         toast.success("Homework updated");
       } else {
         const res = await axiosClient.post("/teacher/homework", fd);
-        setHomework(prev => [...prev, res.data]);
+        setHomework(prev => [...prev, enrich(res.data)]);
         toast.success("Homework created");
       }
       setModalOpen(false);
@@ -200,6 +217,42 @@ const openCreate = () => {
     }
   };
 
+  const openSubmissions = async (hw: any) => {
+    setSubmissionsModal(hw);
+    setSubmissions([]);
+    setMarkValues({});
+    setSubmissionsLoading(true);
+    try {
+      const res = await axiosClient.get(`/teacher/homework/${hw.id}/submissions`);
+      const subs = Array.isArray(res.data) ? res.data : [];
+      setSubmissions(subs);
+      const initial: Record<string, string> = {};
+      subs.forEach((s: any) => { initial[s.id] = s.marks?.toString() ?? ""; });
+      setMarkValues(initial);
+    } catch {
+      toast.error("Failed to load submissions");
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  };
+
+  const saveMark = async (submissionId: string) => {
+    setMarkSaving(prev => ({ ...prev, [submissionId]: true }));
+    try {
+      await axiosClient.patch(`/teacher/homework/submissions/${submissionId}`, {
+        marks: Number(markValues[submissionId]),
+      });
+      toast.success("Mark saved");
+      setSubmissions(prev =>
+        prev.map(s => s.id === submissionId ? { ...s, marks: Number(markValues[submissionId]) } : s)
+      );
+    } catch {
+      toast.error("Failed to save mark");
+    } finally {
+      setMarkSaving(prev => ({ ...prev, [submissionId]: false }));
+    }
+  };
+
   const isOverdue = (dueDate: string) => new Date(dueDate) < new Date();
 
   const filtered = homework.filter(h =>
@@ -207,7 +260,7 @@ const openCreate = () => {
   );
 
   return (
-    <DashboardLayout title="Homework" subtitle="Create and manage homework assignments">
+    <TeacherLayout title="Homework" subtitle="Create and manage homework assignments">
 
       {/* ── Toolbar ── */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -318,9 +371,15 @@ const openCreate = () => {
                       </button>
                     </td>
 
-                    {/* ✅ Edit + Delete */}
                     <td className="px-6 py-3.5">
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openSubmissions(hw)}
+                          title="View & mark submissions"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366F1] hover:bg-[#6366F1]/10 transition-colors"
+                        >
+                          <Users size={14} />
+                        </button>
                         <button
                           onClick={() => openEdit(hw)}
                           className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-600 hover:bg-amber-50 transition-colors"
@@ -345,8 +404,7 @@ const openCreate = () => {
       </div>
 
       {/* ── Modal ── */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className={cn("fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4", !modalOpen && "hidden")}>
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <h3 className="font-bold text-gray-900">
@@ -543,7 +601,6 @@ const openCreate = () => {
             </div>
           </div>
         </div>
-      )}
 
       {/* ── Delete ── */}
       {deleteTarget && (
@@ -570,6 +627,103 @@ const openCreate = () => {
         </div>
       )}
 
-    </DashboardLayout>
+      {/* ── Submissions Modal ── */}
+      {submissionsModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="font-bold text-gray-900">Student Submissions</h3>
+                <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{submissionsModal.title}</p>
+              </div>
+              <button onClick={() => setSubmissionsModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            {submissionsLoading ? (
+              <div className="flex items-center justify-center py-14">
+                <Loader2 size={24} className="animate-spin text-[#6366F1]" />
+              </div>
+            ) : submissions.length === 0 ? (
+              <div className="py-14 text-center text-gray-400">
+                <ClipboardList size={36} className="mx-auto mb-3 opacity-30" />
+                <p className="font-medium">No submissions yet</p>
+                <p className="text-sm mt-1">Students haven't submitted this homework</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {submissions.map((sub: any) => {
+                  const firstName = sub.student?.user?.firstName ?? "";
+                  const lastName  = sub.student?.user?.lastName  ?? "";
+                  const name      = `${firstName} ${lastName}`.trim() || "Unknown Student";
+                  const maxMarks  = submissionsModal.maxMarks;
+                  const isMarked  = sub.marks !== null && sub.marks !== undefined;
+
+                  return (
+                    <div key={sub.id} className="px-6 py-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-[#6366F1]/10 flex items-center justify-center shrink-0 text-[#6366F1] font-bold text-sm">
+                          {firstName[0]}{lastName[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-gray-800 text-sm">{name}</p>
+                            {isMarked && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
+                                <CheckCircle2 size={10} /> Marked
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Submitted: {sub.submittedAt
+                              ? new Date(sub.submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                              : "—"}
+                          </p>
+                          {sub.comment && (
+                            <p className="text-xs text-gray-600 mt-2 bg-gray-50 rounded-xl px-3 py-2">{sub.comment}</p>
+                          )}
+                          {sub.fileUrl && (
+                            <a
+                              href={`http://localhost:5000${sub.fileUrl}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-blue-600 hover:underline mt-1.5 inline-block"
+                            >
+                              📎 View Submission
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={maxMarks || undefined}
+                            placeholder="Mark"
+                            value={markValues[sub.id] ?? ""}
+                            onChange={e => setMarkValues(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                            className="w-20 h-8 text-sm border-gray-200 text-center"
+                          />
+                          {maxMarks && <span className="text-xs text-gray-400 shrink-0">/ {maxMarks}</span>}
+                          <Button
+                            size="sm"
+                            onClick={() => saveMark(sub.id)}
+                            disabled={markSaving[sub.id] || markValues[sub.id] === ""}
+                            className="h-8 bg-[#6366F1] hover:bg-[#4F46E5] text-white text-xs rounded-lg px-3"
+                          >
+                            {markSaving[sub.id] ? <Loader2 size={12} className="animate-spin" /> : "Save"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+    </TeacherLayout>
   );
 }

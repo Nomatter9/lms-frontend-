@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Save, Loader2, CalendarDays, CheckCircle2 } from "lucide-react";
-import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { Save, Loader2, CalendarDays, CheckCircle2, RefreshCw } from "lucide-react";
+import TeacherLayout from "@/components/dashboard/TeacherLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,6 +28,7 @@ export default function TeacherAttendancePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     axiosClient.get("/teacher/classes")
@@ -65,7 +66,7 @@ export default function TeacherAttendancePage() {
       })
       .catch(() => toast.error("Failed to load"))
       .finally(() => setLoading(false));
-  }, [selectedClass, date]);
+  }, [selectedClass, date, refreshKey]);
 
   const markAll = (status: Status) => {
     const updated: Record<string, Status> = {};
@@ -94,7 +95,7 @@ export default function TeacherAttendancePage() {
   };
 
   return (
-    <DashboardLayout title="Attendance" subtitle="Mark and track daily student attendance">
+    <TeacherLayout title="Attendance" subtitle="Mark and track daily student attendance">
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -117,6 +118,14 @@ export default function TeacherAttendancePage() {
         />
 
         <div className="flex gap-2 ml-auto">
+          <button
+            onClick={() => { setRefreshKey(k => k + 1); setSaved(false); }}
+            disabled={loading}
+            className="w-9 h-10 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-[#3B82F6] hover:border-[#3B82F6]/30 hover:bg-[#3B82F6]/5 transition-all disabled:opacity-40"
+            title="Refresh student list"
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+          </button>
           <Button variant="outline" onClick={() => markAll("present")} className="h-10 text-emerald-700 border-emerald-200 hover:bg-emerald-50 rounded-xl text-xs font-semibold">✓ All Present</Button>
           <Button variant="outline" onClick={() => markAll("absent")}  className="h-10 text-rose-700 border-rose-200 hover:bg-rose-50 rounded-xl text-xs font-semibold">✗ All Absent</Button>
         </div>
@@ -201,6 +210,6 @@ export default function TeacherAttendancePage() {
            :          <><Save size={16} /> Save Attendance</>}
         </Button>
       </div>
-    </DashboardLayout>
+    </TeacherLayout>
   );
 }

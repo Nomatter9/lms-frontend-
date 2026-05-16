@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Search, Loader2, GraduationCap } from "lucide-react";
-import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { Search, Loader2, GraduationCap, RefreshCw } from "lucide-react";
+import TeacherLayout from "@/components/dashboard/TeacherLayout";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import axiosClient from "@/axiosClient";
@@ -13,6 +13,7 @@ export default function TeacherStudentsPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     axiosClient.get("/teacher/classes")
@@ -34,11 +35,24 @@ export default function TeacherStudentsPage() {
   useEffect(() => {
     if (!selectedClass) return;
     setLoading(true);
-    axiosClient.get(`/teacher/classes/${selectedClass}/students`)
-      .then(res => setStudents(Array.isArray(res.data) ? res.data : []))
+
+    Promise.all([
+      axiosClient.get(`/teacher/classes/${selectedClass}/students`),
+      axiosClient.get("/auth/parents").catch(() => ({ data: [] })),
+    ])
+      .then(([studentsRes, parentsRes]) => {
+        const list: any[] = Array.isArray(studentsRes.data) ? studentsRes.data : [];
+        const parents: any[] = Array.isArray(parentsRes.data) ? parentsRes.data : [];
+        const parentMap = new Map(parents.map(p => [p.id, p]));
+
+        setStudents(list.map(s => ({
+          ...s,
+          parent: s.parent ?? parentMap.get(s.parentId) ?? null,
+        })));
+      })
       .catch(() => toast.error("Failed to load students"))
       .finally(() => setLoading(false));
-  }, [selectedClass]);
+  }, [selectedClass, refreshKey]);
 
   const filtered = students.filter((s) =>
     `${s.user?.firstName} ${s.user?.lastName} ${s.regNumber || ""}`.toLowerCase().includes(search.toLowerCase())
@@ -56,7 +70,7 @@ export default function TeacherStudentsPage() {
   const initials = (s: any) => `${studentFirst(s)[0] || ""}${studentLast(s)[0] || ""}`.toUpperCase();
 
   return (
-    <DashboardLayout title="My Students" subtitle="View all students in your classes">
+    <TeacherLayout title="My Students" subtitle="View all students in your classes">
 
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <Select value={selectedClass} onValueChange={setSelectedClass}>
@@ -74,12 +88,27 @@ export default function TeacherStudentsPage() {
 
         <div className="relative flex-1 max-w-sm">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <Input placeholder="Search students..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 bg-white border-gray-200 h-10" />
+          <Input
+            placeholder="Search students..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 bg-white border-gray-200 h-10"
+          />
         </div>
 
-        <div className="ml-auto flex items-center gap-2 text-sm text-gray-500">
-          <GraduationCap size={16} className="text-emerald-500" />
-          <span className="font-semibold">{filtered.length}</span> students
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={() => setRefreshKey(k => k + 1)}
+            disabled={loading}
+            className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-[#6366F1] hover:border-[#6366F1]/30 hover:bg-[#6366F1]/5 transition-all disabled:opacity-40"
+            title="Refresh student list"
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+          </button>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <GraduationCap size={16} className="text-emerald-500" />
+            <span className="font-semibold">{filtered.length}</span> students
+          </div>
         </div>
       </div>
 
@@ -102,7 +131,7 @@ export default function TeacherStudentsPage() {
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Student</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Reg No.</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Gender</th>
-                  <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Parent</th>
+                  <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Parent / Guardian</th>
                   <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Status</th>
                 </tr>
               </thead>
@@ -130,9 +159,9 @@ export default function TeacherStudentsPage() {
                         )}>
                           {s.gender}
                         </span>
-                      ) : "—"}
+                      ) : <span className="text-gray-300 text-xs">—</span>}
                     </td>
-                    <td className="px-6 py-3.5 text-sm text-gray-500">
+                    <td className="px-6 py-3.5 text-sm text-gray-600">
                       {parentName(s)
                         ? parentName(s)
                         : <span className="text-gray-300 italic text-xs">—</span>
@@ -153,6 +182,6 @@ export default function TeacherStudentsPage() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </TeacherLayout>
   );
 }

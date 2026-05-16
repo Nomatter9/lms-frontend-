@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus, Edit2, Trash2, Search, X, Save, Loader2, GraduationCap, ClipboardList } from "lucide-react";
-import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import TeacherLayout from "@/components/dashboard/TeacherLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,13 +102,24 @@ export default function TeacherAssessmentsPage() {
     setSaving(true);
     try {
       const payload = { ...form, maxMarks: parseInt(form.maxMarks) || 100 };
+
+      const selectedSubject = subjects.find(s => s.id === form.classSubjectId);
+      const selectedTerm    = terms.find(t => String(t.id) === form.termId);
+      const enrich = (data: any) => ({
+        ...data,
+        classSubject: selectedSubject
+          ? { ...(data.classSubject ?? {}), ...selectedSubject }
+          : data.classSubject,
+        term: selectedTerm ?? data.term,
+      });
+
       if (editTarget) {
         const res = await axiosClient.put(`/teacher/assessments/${editTarget.id}`, payload);
-        setAssessments(prev => prev.map(a => a.id === editTarget.id ? res.data : a));
+        setAssessments(prev => prev.map(a => a.id === editTarget.id ? enrich(res.data) : a));
         toast.success("Assessment updated");
       } else {
         const res = await axiosClient.post("/teacher/assessments", payload);
-        setAssessments(prev => [...prev, res.data]);
+        setAssessments(prev => [...prev, enrich(res.data)]);
         toast.success("Assessment created");
       }
       setModalOpen(false);
@@ -170,7 +181,7 @@ export default function TeacherAssessmentsPage() {
   );
 
   return (
-    <DashboardLayout title="Assessments" subtitle="Create tests, record marks and generate grades">
+    <TeacherLayout title="Assessments" subtitle="Create tests, record marks and generate grades">
 
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1 max-w-sm">
@@ -437,6 +448,6 @@ export default function TeacherAssessmentsPage() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </TeacherLayout>
   );
 }

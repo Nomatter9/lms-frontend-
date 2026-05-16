@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils";
 
 type Status = "present" | "absent" | "late";
 
-const statusConfig: Record<Status, { label: string; badge: string; card: string }> = {
-  present: { label: "Present", badge: "bg-emerald-100 text-emerald-700", card: "bg-emerald-50 border-emerald-100 text-emerald-700" },
-  absent:  { label: "Absent",  badge: "bg-rose-100 text-rose-700",       card: "bg-rose-50 border-rose-100 text-rose-700" },
-  late:    { label: "Late",    badge: "bg-amber-100 text-amber-700",     card: "bg-amber-50 border-amber-100 text-amber-700" },
+const statusConfig: Record<Status, { label: string; badge: string; gradient: string }> = {
+  present: { label: "Present", badge: "bg-emerald-100 text-emerald-700", gradient: "linear-gradient(135deg, #10B981, #059669)" },
+  absent:  { label: "Absent",  badge: "bg-rose-100 text-rose-700",       gradient: "linear-gradient(135deg, #EF4444, #F43F5E)" },
+  late:    { label: "Late",    badge: "bg-amber-100 text-amber-700",     gradient: "linear-gradient(135deg, #F59E0B, #D97706)" },
 };
 
 export default function StudentAttendancePage() {
@@ -18,7 +18,7 @@ export default function StudentAttendancePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axiosClient.get("/student/attendance")
+    axiosClient.get("/students/me/attendance")
       .then(res => setRecords(Array.isArray(res.data) ? res.data : []))
       .catch(() => toast.error("Failed to load attendance"))
       .finally(() => setLoading(false));
@@ -41,9 +41,16 @@ export default function StudentAttendancePage() {
       {!loading && records.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-5">
           {(["present", "absent", "late"] as Status[]).map(s => (
-            <div key={s} className={cn("rounded-2xl p-4 border text-center", statusConfig[s].card)}>
-              <p className="text-2xl font-extrabold">{counts[s]}</p>
-              <p className="text-xs font-bold uppercase tracking-wider mt-1">{statusConfig[s].label}</p>
+            <div
+              key={s}
+              className="rounded-2xl p-4 text-center text-white relative overflow-hidden shadow-md"
+              style={{ background: statusConfig[s].gradient }}
+            >
+              <div className="absolute -right-3 -top-3 w-14 h-14 rounded-full bg-white/10" />
+              <div className="relative z-10">
+                <p className="text-3xl font-extrabold">{counts[s]}</p>
+                <p className="text-xs font-bold uppercase tracking-wider mt-1 text-white/80">{statusConfig[s].label}</p>
+              </div>
             </div>
           ))}
         </div>
