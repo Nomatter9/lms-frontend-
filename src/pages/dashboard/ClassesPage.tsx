@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Plus, Edit2, Trash2, Search, X, Save, Loader2, Layers } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Plus, Edit2, Trash2, Search, X, Save, Loader2, Layers, AlertTriangle, RefreshCw } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +9,14 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Modal, ConfirmDialog } from "@/components/ui/Modal";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import axiosClient from "@/axiosClient";
+import { useQueryClient } from "@tanstack/react-query";
+import { useClasses, useGrades, useAcademicYears, useStaff } from "@/hooks/queries";
 import { toast } from "sonner";
-import type { ClassItem, Grade, AcademicYear, User } from "@/types";
+import type { ClassItem, User } from "@/types";
 import type { ClassForm } from "@/types/forms";
 
 type Teacher = Pick<User, 'id' | 'firstName' | 'lastName' | 'role'>;
@@ -25,11 +31,13 @@ const formatCapacity = (capacity?: number) => {
 };
 
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [grades, setGrades] = useState<Grade[]>([]);
-  const [years, setYears] = useState<AcademicYear[]>([]);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: classes = [], isLoading: classesLoading, isSuccess, isError: classesError, error: classesFetchError, refetch: refetchClasses } = useClasses();
+  const { data: grades = [], isLoading: gradesLoading } = useGrades();
+  const { data: years = [], isLoading: yearsLoading } = useAcademicYears();
+  const { data: staff = [], isLoading: staffLoading } = useStaff();
+  const teachers = (staff as Teacher[]).filter((s) => s.role === "teacher");
+  const isLoading = classesLoading || gradesLoading || yearsLoading || staffLoading;
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ClassItem | null>(null);
@@ -38,34 +46,16 @@ export default function ClassesPage() {
   const [deleteTarget, setDeleteTarget] = useState<ClassItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-
-  const fetchAll = async () => {
-    setLoading(true);
-    try {
-      const [classesRes, gradesRes, yearsRes, staffRes] = await Promise.all([
-        axiosClient.get("/classes"),
-        axiosClient.get("/grades"),
-        axiosClient.get("/academicYear"),
-        axiosClient.get("/auth/staff"),
-      ]);
-      setClasses(classesRes.data);
-      setGrades(gradesRes.data);
-      setYears(yearsRes.data);
-      setTeachers(staffRes.data.filter((s: Teacher) => s.role === "teacher"));
-    } catch {
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchAll(); }, []);
-
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditTarget(null);
     setForm({ ...EMPTY_FORM, academicYearId: years.find((y) => y.isCurrent)?.id || "" });
     setModalOpen(true);
-  };
+  }, [years]);
+
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (isSuccess && searchParams.get("open") === "create") openCreate();
+  }, [isSuccess, searchParams, openCreate]);
 
   const openEdit = (cls: ClassItem) => {
     setEditTarget(cls);
@@ -93,28 +83,20 @@ export default function ClassesPage() {
         teacherId: form.teacherId || null,
         capacity: form.capacity !== "" ? Number(form.capacity) : null,
       };
-      const selectedTeacher = teachers.find((t) => t.id === form.teacherId) ?? null;
       const newTeacherId = form.teacherId || null;
       const prevTeacherId = editTarget?.teacherId || null;
 
       let classId: string;
       if (editTarget) {
-        const res = await axiosClient.put(`/classes/${editTarget.id}`, payload);
+        await axiosClient.put(`/classes/${editTarget.id}`, payload);
         classId = editTarget.id;
-        setClasses((prev) => prev.map((c) =>
-          c.id === editTarget.id
-            ? { ...res.data, teacher: selectedTeacher ?? undefined }
-            : c
-        ));
         toast.success("Class updated");
       } else {
         const res = await axiosClient.post("/classes", payload);
         classId = res.data.id;
-        setClasses((prev) => [...prev, { ...res.data, teacher: selectedTeacher ?? undefined }]);
         toast.success("Class created");
       }
 
-      // Keep staff.classId in sync so the teacher's dashboard can find this class
       if (newTeacherId !== prevTeacherId) {
         if (prevTeacherId) {
           axiosClient.put(`/auth/staff/${prevTeacherId}`, { classId: null }).catch(() => {});
@@ -125,6 +107,7 @@ export default function ClassesPage() {
       }
 
       setModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["classes"] });
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to save class");
     } finally {
@@ -137,9 +120,9 @@ export default function ClassesPage() {
     setDeleting(true);
     try {
       await axiosClient.delete(`/classes/${deleteTarget.id}`);
-      setClasses((prev) => prev.filter((c) => c.id !== deleteTarget.id));
       toast.success("Class deleted");
       setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["classes"] });
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to delete");
     } finally {
@@ -153,7 +136,10 @@ export default function ClassesPage() {
   );
 
   return (
-    <DashboardLayout title="Classes" subtitle="Manage school classes and assign teachers">
+    <DashboardLayout
+      title="Classes"
+      subtitle={`Manage school classes and assign teachers${!isLoading && !classesError ? ` · ${classes.length} loaded` : ""}`}
+    >
 
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1 max-w-sm">
@@ -170,17 +156,29 @@ export default function ClassesPage() {
         </Button>
       </div>
 
+      {classesError && (
+        <div className="mb-4 flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700">
+          <AlertTriangle size={18} className="shrink-0" />
+          <p className="text-sm font-medium flex-1">
+            Failed to load classes: {(classesFetchError as any)?.response?.data?.message || (classesFetchError as any)?.message || "Network error"}
+          </p>
+          <button onClick={() => refetchClasses()} className="flex items-center gap-1.5 text-xs font-semibold hover:text-rose-900 transition-colors">
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-[#6366F1]" />
-          </div>
+        {isLoading ? (
+          <TableSkeleton cols={6} />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <Layers size={40} className="mb-3 opacity-30" />
-            <p className="font-medium">No classes found</p>
-            <p className="text-sm mt-1">Create your first class to get started</p>
-          </div>
+          <EmptyState
+            icon={Layers}
+            title={search ? "No classes match your search" : "No classes yet"}
+            description={search ? "Try a different search term" : "Create your first class to get started"}
+            actionLabel={search ? undefined : "Add Class"}
+            onAction={search ? undefined : openCreate}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -199,9 +197,7 @@ export default function ClassesPage() {
                         <div className="w-9 h-9 rounded-xl bg-[#6366F1]/10 flex items-center justify-center">
                           <Layers size={15} className="text-[#6366F1]" />
                         </div>
-                        <span className="text-sm font-bold text-gray-800">
-                          {cls.grade?.label} {cls.name}
-                        </span>
+                        <span className="text-sm font-bold text-gray-800">{cls.grade?.label} {cls.name}</span>
                       </div>
                     </td>
                     <td className="px-6 py-3.5">
@@ -221,15 +217,21 @@ export default function ClassesPage() {
                         : "—"
                       }
                     </td>
-                    <td className="px-6 py-3.5 text-sm text-gray-500">
-                      {formatCapacity(cls.capacity)}
-                    </td>
+                    <td className="px-6 py-3.5 text-sm text-gray-500">{formatCapacity(cls.capacity)}</td>
                     <td className="px-6 py-3.5">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => openEdit(cls)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366F1] hover:bg-[#6366F1]/10 transition-colors">
+                        <button
+                          onClick={() => openEdit(cls)}
+                          aria-label={`Edit ${cls.grade?.label} ${cls.name}`}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366F1] hover:bg-[#6366F1]/10 transition-colors"
+                        >
                           <Edit2 size={14} />
                         </button>
-                        <button onClick={() => setDeleteTarget(cls)} className="w-8 h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors">
+                        <button
+                          onClick={() => setDeleteTarget(cls)}
+                          aria-label={`Delete ${cls.grade?.label} ${cls.name}`}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
+                        >
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -241,154 +243,121 @@ export default function ClassesPage() {
           </div>
         )}
       </div>
-{modalOpen && (
-  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-visible">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-        <h3 className="font-bold text-gray-900">
-          {editTarget ? "Edit Class" : "Add New Class"}
-        </h3>
-        <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
-          <X size={18} />
-        </button>
-      </div>
 
-      <div className="p-6 space-y-5">
-        <div className="grid grid-cols-2 gap-4">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+          <h3 className="font-bold text-gray-900">{editTarget ? "Edit Class" : "Add New Class"}</h3>
+          <button onClick={() => setModalOpen(false)} aria-label="Close" className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                Grade <span className="text-rose-500">*</span>
+              </Label>
+              <Select
+                value={form.gradeId || undefined}
+                onValueChange={(val) => setForm({ ...form, gradeId: val })}
+              >
+                <SelectTrigger className="h-10 border-gray-200 w-full">
+                  <SelectValue placeholder="Select grade" />
+                </SelectTrigger>
+                <SelectContent className="z-[200] bg-white border border-gray-100 shadow-xl max-h-[250px]">
+                  {grades.map(g => (
+                    <SelectItem key={g.id} value={g.id}>{g.label || `Grade ${g.level}`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                Section <span className="text-rose-500">*</span>
+              </Label>
+              <Input
+                placeholder="e.g. A, B"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })}
+                className="border-gray-200 h-10"
+              />
+            </div>
+          </div>
+
+          {form.gradeId && form.name && (
+            <div className="bg-[#6366F1]/5 border border-[#6366F1]/10 rounded-xl p-3 flex items-center justify-between">
+              <span className="text-xs text-[#6366F1] font-medium">Full Class Name:</span>
+              <span className="text-sm font-bold text-[#6366F1]">
+                {grades.find(g => g.id === form.gradeId)?.label} {form.name}
+              </span>
+            </div>
+          )}
+
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-              Grade <span className="text-rose-500">*</span>
-            </Label>
+            <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Academic Year</Label>
+            <div className="relative">
+              <Input
+                value={years.find(y => y.id === form.academicYearId)?.year?.toString() || "No active year set"}
+                disabled
+                className="bg-gray-50 border-gray-200 h-10 text-gray-600 font-medium cursor-not-allowed pr-20"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold uppercase">
+                Current
+              </span>
+            </div>
+            <p className="text-[10px] text-gray-400 ml-1">Classes are automatically assigned to the current academic year.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Class Teacher</Label>
             <Select
-              value={form.gradeId || undefined}
-              onValueChange={(val) => setForm({ ...form, gradeId: val })}
+              value={form.teacherId || "unassigned"}
+              onValueChange={(val) => setForm({ ...form, teacherId: val === "unassigned" ? "" : val })}
             >
               <SelectTrigger className="h-10 border-gray-200 w-full">
-                <SelectValue placeholder="Select grade" />
+                <SelectValue placeholder="Select teacher" />
               </SelectTrigger>
               <SelectContent className="z-[200] bg-white border border-gray-100 shadow-xl max-h-[250px]">
-{grades.map(g => (
-  <SelectItem key={g.id} value={g.id}>
-    {g.label || `Grade ${g.level}`} 
-  </SelectItem>
-))}
-                
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {teachers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-              Section <span className="text-rose-500">*</span>
-            </Label>
+            <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Capacity</Label>
             <Input
-              placeholder="e.g. A, B"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })}
+              type="number"
+              placeholder="e.g. 30"
+              min={1}
+              value={form.capacity}
+              onChange={(e) => setForm({ ...form, capacity: e.target.value })}
               className="border-gray-200 h-10"
             />
           </div>
         </div>
 
-        {/* Live Preview */}
-        {form.gradeId && form.name && (
-          <div className="bg-[#6366F1]/5 border border-[#6366F1]/10 rounded-xl p-3 flex items-center justify-between">
-            <span className="text-xs text-[#6366F1] font-medium">Full Class Name:</span>
-            <span className="text-sm font-bold text-[#6366F1]">
-              {grades.find(g => g.id === form.gradeId)?.label} {form.name}
-            </span>
-          </div>
-        )}
-
-        {/* Academic Year — locked to current */}
-        <div className="space-y-1.5">
-          <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Academic Year</Label>
-          <div className="relative">
-            <Input
-              value={years.find(y => y.id === form.academicYearId)?.year?.toString() || "No active year set"}
-              disabled
-              className="bg-gray-50 border-gray-200 h-10 text-gray-600 font-medium cursor-not-allowed pr-20"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold uppercase">
-              Current
-            </span>
-          </div>
-          <p className="text-[10px] text-gray-400 ml-1">
-            Classes are automatically assigned to the current academic year.
-          </p>
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+          <Button variant="outline" onClick={() => setModalOpen(false)} className="flex-1 border-gray-200 text-gray-600 h-10 rounded-xl">Cancel</Button>
+          <Button onClick={handleSave} disabled={saving} className="flex-1 bg-[#6366F1] hover:bg-[#5558E3] text-white h-10 rounded-xl gap-2">
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {editTarget ? "Update" : "Create"}
+          </Button>
         </div>
+      </Modal>
 
-        {/* Class Teacher */}
-        <div className="space-y-1.5">
-          <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-            Class Teacher
-          </Label>
-          <Select
-            value={form.teacherId || "unassigned"}
-            onValueChange={(val) => setForm({ ...form, teacherId: val === "unassigned" ? "" : val })}
-          >
-            <SelectTrigger className="h-10 border-gray-200 w-full">
-              <SelectValue placeholder="Select teacher" />
-            </SelectTrigger>
-            <SelectContent className="z-[200] bg-white border border-gray-100 shadow-xl max-h-[250px]">
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-              {teachers.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.firstName} {t.lastName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Capacity */}
-        <div className="space-y-1.5">
-          <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-            Capacity 
-          </Label>
-          <Input
-            type="number"
-            placeholder="e.g. 30"
-            min={1}
-            value={form.capacity}
-            onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-            className="border-gray-200 h-10"
-          />
-        </div>
-      </div>
-
-      <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
-        <Button variant="outline" onClick={() => setModalOpen(false)} className="flex-1 border-gray-200 text-gray-600 h-10 rounded-xl">
-          Cancel
-        </Button>
-        <Button onClick={handleSave} disabled={saving} className="flex-1 bg-[#6366F1] hover:bg-[#5558E3] text-white h-10 rounded-xl gap-2">
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-          {editTarget ? "Update" : "Create"}
-        </Button>
-      </div>
-    </div>
-  </div>
-)}
-      {/* ── Delete Confirm ── */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
-            <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-4">
-              <Trash2 size={20} className="text-rose-600" />
-            </div>
-            <h3 className="font-bold text-gray-900 text-center mb-1">Delete Class</h3>
-            <p className="text-sm text-gray-500 text-center mb-6">
-              Delete <span className="font-semibold text-gray-800">{deleteTarget.grade?.label} {deleteTarget.name}</span>? This cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setDeleteTarget(null)} className="flex-1 border-gray-200 h-10 rounded-xl">Cancel</Button>
-              <Button onClick={handleDelete} disabled={deleting} className="flex-1 bg-rose-500 hover:bg-rose-600 text-white h-10 rounded-xl gap-2">
-                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Delete
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        confirming={deleting}
+        title="Delete Class"
+        description={<>Delete <span className="font-semibold text-gray-800">{deleteTarget?.grade?.label} {deleteTarget?.name}</span>? This cannot be undone.</>}
+        icon={<Trash2 size={20} className="text-rose-600" />}
+      />
 
     </DashboardLayout>
   );

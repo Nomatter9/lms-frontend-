@@ -20,7 +20,7 @@ export interface TeacherSubject {
   class?: {
     id: string;
     name: string;
-    grade?: { label: string };
+    grade?: { label: string; level?: number };
   };
 }
 

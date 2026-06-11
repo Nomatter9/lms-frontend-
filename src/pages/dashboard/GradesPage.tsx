@@ -1,10 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus, Edit2, Trash2, Search, X, Save, Loader2, GraduationCap } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Modal, ConfirmDialog } from "@/components/ui/Modal";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import axiosClient from "@/axiosClient";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGrades } from "@/hooks/queries";
 import { toast } from "sonner";
 import type { Grade } from "@/types";
 import type { GradeForm } from "@/types/forms";
@@ -12,8 +18,8 @@ import type { GradeForm } from "@/types/forms";
 const EMPTY_FORM: GradeForm = { level: "", label: "" };
 
 export default function GradesPage() {
-  const [grades, setGrades] = useState<Grade[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: grades = [], isLoading, isSuccess } = useGrades();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Grade | null>(null);
@@ -22,25 +28,16 @@ export default function GradesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Grade | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const fetchGrades = async () => {
-    setLoading(true);
-    try {
-      const res = await axiosClient.get("/grades");
-      setGrades(res.data);
-    } catch {
-      toast.error("Failed to load grades");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchGrades(); }, []);
-
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditTarget(null);
     setForm(EMPTY_FORM);
     setModalOpen(true);
-  };
+  }, []);
+
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (isSuccess && searchParams.get("open") === "create") openCreate();
+  }, [isSuccess, searchParams, openCreate]);
 
   const openEdit = (g: Grade) => {
     setEditTarget(g);
@@ -63,7 +60,7 @@ export default function GradesPage() {
         toast.success("Grade created");
       }
       setModalOpen(false);
-      fetchGrades();
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to save");
     } finally {
@@ -78,7 +75,7 @@ export default function GradesPage() {
       await axiosClient.delete(`/grades/${deleteTarget.id}`);
       toast.success("Grade deleted");
       setDeleteTarget(null);
-      fetchGrades();
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to delete");
     } finally {
@@ -109,15 +106,16 @@ export default function GradesPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-[#6366F1]" />
-          </div>
+        {isLoading ? (
+          <TableSkeleton cols={3} />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <GraduationCap size={40} className="mb-3 opacity-30" />
-            <p className="font-medium">No grades found</p>
-          </div>
+          <EmptyState
+            icon={GraduationCap}
+            title={search ? "No grades match your search" : "No grades yet"}
+            description={search ? "Try a different search term" : "Add your first grade level to get started"}
+            actionLabel={search ? undefined : "Add Grade"}
+            onAction={search ? undefined : openCreate}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -141,12 +139,14 @@ export default function GradesPage() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => openEdit(grade)}
+                          aria-label={`Edit ${grade.label}`}
                           className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366F1] hover:bg-[#6366F1]/10 transition-colors"
                         >
                           <Edit2 size={14} />
                         </button>
                         <button
                           onClick={() => setDeleteTarget(grade)}
+                          aria-label={`Delete ${grade.label}`}
                           className="w-8 h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
                         >
                           <Trash2 size={14} />
@@ -161,72 +161,56 @@ export default function GradesPage() {
         )}
       </div>
 
-      {/* ── Create/Edit Modal ── */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900">{editTarget ? "Edit Grade" : "Add Grade"}</h3>
-              <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Level (1–7)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={7}
-                  placeholder="e.g. 3"
-                  value={form.level}
-                  onChange={(e) => setForm({ ...form, level: e.target.value })}
-                  className="border-gray-200 h-10"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Label</Label>
-                <Input
-                  placeholder="e.g. Grade 3"
-                  value={form.label}
-                  onChange={(e) => setForm({ ...form, label: e.target.value })}
-                  className="border-gray-200 h-10"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
-              <Button variant="outline" onClick={() => setModalOpen(false)} className="flex-1 border-gray-200 h-10 rounded-xl">
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={saving} className="flex-1 bg-[#6366F1] hover:bg-[#5558E3] text-white h-10 rounded-xl gap-2">
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                {editTarget ? "Update" : "Create"}
-              </Button>
-            </div>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-gray-900">{editTarget ? "Edit Grade" : "Add Grade"}</h3>
+          <button onClick={() => setModalOpen(false)} aria-label="Close" className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Level (1–7)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={7}
+              placeholder="e.g. 3"
+              value={form.level}
+              onChange={(e) => setForm({ ...form, level: e.target.value })}
+              className="border-gray-200 h-10"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Label</Label>
+            <Input
+              placeholder="e.g. Grade 3"
+              value={form.label}
+              onChange={(e) => setForm({ ...form, label: e.target.value })}
+              className="border-gray-200 h-10"
+            />
           </div>
         </div>
-      )}
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+          <Button variant="outline" onClick={() => setModalOpen(false)} className="flex-1 border-gray-200 h-10 rounded-xl">
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving} className="flex-1 bg-[#6366F1] hover:bg-[#5558E3] text-white h-10 rounded-xl gap-2">
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {editTarget ? "Update" : "Create"}
+          </Button>
+        </div>
+      </Modal>
 
-      {/* ── Delete Confirm ── */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
-            <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-4">
-              <Trash2 size={20} className="text-rose-600" />
-            </div>
-            <h3 className="font-bold text-gray-900 text-center mb-1">Delete Grade</h3>
-            <p className="text-sm text-gray-500 text-center mb-6">
-              Delete <span className="font-semibold text-gray-800">{deleteTarget.label}</span>? This cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setDeleteTarget(null)} className="flex-1 border-gray-200 h-10 rounded-xl">Cancel</Button>
-              <Button onClick={handleDelete} disabled={deleting} className="flex-1 bg-rose-500 hover:bg-rose-600 text-white h-10 rounded-xl gap-2">
-                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Delete
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        confirming={deleting}
+        title="Delete Grade"
+        description={<>Delete <span className="font-semibold text-gray-800">{deleteTarget?.label}</span>? This cannot be undone.</>}
+        icon={<Trash2 size={20} className="text-rose-600" />}
+      />
 
     </DashboardLayout>
   );

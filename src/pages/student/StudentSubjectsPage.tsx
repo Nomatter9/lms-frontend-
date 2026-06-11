@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
-import { BookOpen, Loader2, GraduationCap } from "lucide-react";
+import { BookOpen, GraduationCap } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import axiosClient from "@/axiosClient";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { useStudentSubjects } from "@/hooks/queries";
+import { CardGridSkeleton } from "@/components/ui/TableSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const GRADIENTS = [
   "linear-gradient(135deg, #6366F1, #8B5CF6)",
@@ -15,27 +14,15 @@ const GRADIENTS = [
 ];
 
 export default function StudentSubjectsPage() {
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    axiosClient.get("/students/me/subjects")
-      .then(res => setSubjects(Array.isArray(res.data) ? res.data : []))
-      .catch(() => toast.error("Failed to load subjects"))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: subjects = [], isLoading } = useStudentSubjects();
 
   return (
     <DashboardLayout title="My Subjects" subtitle="All subjects you are enrolled in">
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={28} className="animate-spin text-[#6366F1]" />
-        </div>
+      {isLoading ? (
+        <CardGridSkeleton count={6} />
       ) : subjects.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center">
-          <BookOpen size={40} className="mx-auto mb-3 text-gray-300" />
-          <p className="font-semibold text-gray-500">No subjects found</p>
-          <p className="text-sm text-gray-400 mt-1">Contact your school administrator</p>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <EmptyState icon={BookOpen} title="No subjects found" description="Contact your school administrator" />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

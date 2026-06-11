@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
-import { CalendarCheck, Loader2 } from "lucide-react";
+import { CalendarCheck, Loader2, RefreshCw } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import axiosClient from "@/axiosClient";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useStudentAttendance } from "@/hooks/queries";
 
 type Status = "present" | "absent" | "late";
 
@@ -14,15 +12,7 @@ const statusConfig: Record<Status, { label: string; badge: string; gradient: str
 };
 
 export default function StudentAttendancePage() {
-  const [records, setRecords] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    axiosClient.get("/students/me/attendance")
-      .then(res => setRecords(Array.isArray(res.data) ? res.data : []))
-      .catch(() => toast.error("Failed to load attendance"))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: records = [], isLoading, isFetching, refetch } = useStudentAttendance();
 
   const counts = {
     present: records.filter(r => r.status === "present").length,
@@ -38,7 +28,7 @@ export default function StudentAttendancePage() {
     <DashboardLayout title="My Attendance" subtitle="Your daily attendance record">
 
       {/* Summary cards */}
-      {!loading && records.length > 0 && (
+      {!isLoading && records.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-5">
           {(["present", "absent", "late"] as Status[]).map(s => (
             <div
@@ -57,22 +47,31 @@ export default function StudentAttendancePage() {
       )}
 
       {/* Attendance rate banner */}
-      {!loading && attendancePct !== null && (
+      {!isLoading && attendancePct !== null && (
         <div className="bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] rounded-2xl p-4 text-white flex items-center gap-4 mb-5">
           <div className="flex-1">
             <p className="text-[11px] font-semibold opacity-60 uppercase tracking-widest mb-1">Attendance Rate</p>
             <div className="flex items-end gap-3">
               <p className="text-3xl font-extrabold leading-none">{attendancePct}%</p>
-              <p className="text-xs opacity-70 pb-0.5">{records.length} total days</p>
+              <p className="text-xs opacity-70 pb-0.5">{records.length} total days recorded</p>
             </div>
           </div>
-          <div className="w-16 h-16 rounded-full border-4 border-white/30 flex items-center justify-center shrink-0">
-            <CalendarCheck size={24} className="text-white" />
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-1.5 text-xs font-semibold text-white/80 hover:text-white transition-colors disabled:opacity-50"
+            title="Refresh attendance"
+          >
+            <RefreshCw size={14} className={cn(isFetching && "animate-spin")} />
+            Refresh
+          </button>
+          <div className="w-14 h-14 rounded-full border-4 border-white/30 flex items-center justify-center shrink-0">
+            <CalendarCheck size={22} className="text-white" />
           </div>
         </div>
       )}
 
-      {loading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 size={28} className="animate-spin text-[#3B82F6]" />
         </div>
@@ -83,41 +82,87 @@ export default function StudentAttendancePage() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">#</th>
-                <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Date</th>
-                <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Class</th>
-                <th className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {records.map((r: any, i: number) => {
-                const status = (r.status || "present") as Status;
-                const grade  = r.class?.grade?.label ?? "";
-                const cls    = r.class?.name ?? "";
-                const cfg    = statusConfig[status] ?? statusConfig.present;
 
-                return (
-                  <tr key={r.id ?? i} className="hover:bg-[#F4F7FE]/50 transition-colors">
-                    <td className="px-6 py-3.5 text-sm text-gray-400 font-medium">{i + 1}</td>
-                    <td className="px-6 py-3.5 text-sm font-semibold text-gray-700">
-                      {r.date
-                        ? new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+          {/* ── Mobile card list ── */}
+          <div className="sm:hidden divide-y divide-gray-50">
+            {records.map((r: any, i: number) => {
+              const status = (r.status || "present") as Status;
+              const grade  = r.class?.grade?.label ?? "";
+              const cls    = r.class?.name ?? "";
+              const cfg    = statusConfig[status] ?? statusConfig.present;
+              const dateObj = r.date ? new Date(r.date) : null;
+
+              return (
+                <div key={r.id ?? i} className="p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white text-xs font-bold"
+                    style={{ background: cfg.gradient }}>
+                    {dateObj ? dateObj.toLocaleDateString("en-GB", { day: "2-digit" }) : "—"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">
+                      {dateObj
+                        ? dateObj.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
                         : "—"}
-                    </td>
-                    <td className="px-6 py-3.5 text-sm text-gray-500">{grade} {cls || "—"}</td>
-                    <td className="px-6 py-3.5">
-                      <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full capitalize", cfg.badge)}>
-                        {cfg.label}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">{grade} {cls || "—"}</p>
+                  </div>
+                  <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full shrink-0", cfg.badge)}>
+                    {cfg.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Desktop table ── */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  {["#", "Date", "Day", "Class", "Status", "Notes"].map(h => (
+                    <th key={h} className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider px-6 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {records.map((r: any, i: number) => {
+                  const status  = (r.status || "present") as Status;
+                  const grade   = r.class?.grade?.label ?? "";
+                  const cls     = r.class?.name ?? "";
+                  const cfg     = statusConfig[status] ?? statusConfig.present;
+                  const dateObj = r.date ? new Date(r.date) : null;
+
+                  return (
+                    <tr key={r.id ?? i} className="hover:bg-[#F4F7FE]/50 transition-colors">
+                      <td className="px-6 py-3.5 text-sm text-gray-400 font-medium">{i + 1}</td>
+                      <td className="px-6 py-3.5 text-sm font-semibold text-gray-700">
+                        {dateObj
+                          ? dateObj.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                          : "—"}
+                      </td>
+                      <td className="px-6 py-3.5 text-sm text-gray-400">
+                        {dateObj
+                          ? dateObj.toLocaleDateString("en-GB", { weekday: "long" })
+                          : "—"}
+                      </td>
+                      <td className="px-6 py-3.5 text-sm text-gray-500">{grade} {cls || "—"}</td>
+                      <td className="px-6 py-3.5">
+                        <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", cfg.badge)}>
+                          {cfg.label}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3.5 text-sm text-gray-400 max-w-xs">
+                        {r.notes
+                          ? <span className="italic">{r.notes}</span>
+                          : <span className="text-gray-200">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
         </div>
       )}
     </DashboardLayout>

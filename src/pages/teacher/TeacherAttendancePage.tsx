@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { Save, Loader2, CalendarDays, CheckCircle2, RefreshCw } from "lucide-react";
+import { useTeacherClasses } from "@/hooks/queries";
+import { Save, Loader2, CalendarDays, CheckCircle2, RefreshCw, XCircle, Clock } from "lucide-react";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import TeacherLayout from "@/components/dashboard/TeacherLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,32 +23,21 @@ const studentFirst = (s: any) => s.user?.firstName ?? s.firstName ?? "";
 const studentLast  = (s: any) => s.user?.lastName  ?? s.lastName  ?? "";
 
 export default function TeacherAttendancePage() {
-  const [classes, setClasses] = useState<any[]>([]);
+  const { data: classes = [] } = useTeacherClasses();
   const [selectedClass, setSelectedClass] = useState("");
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<string, Status>>({});
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    axiosClient.get("/teacher/classes")
-      .then(res => {
-        const list = Array.isArray(res.data) ? res.data : [];
-        setClasses(list);
-        if (list.length > 0) {
-          setSelectedClass(list[0].id);
-        } else {
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        toast.error("Failed to load classes");
-        setLoading(false);
-      });
-  }, []);
+    if (classes.length > 0 && !selectedClass) {
+      setSelectedClass(classes[0].id);
+    }
+  }, [classes, selectedClass]);
 
   useEffect(() => {
     if (!selectedClass) return;
@@ -113,6 +105,7 @@ export default function TeacherAttendancePage() {
         <Input
           type="date"
           value={date}
+          max={new Date().toISOString().split("T")[0]}
           onChange={e => { setDate(e.target.value); setSaved(false); }}
           className="bg-white border-gray-200 h-10 w-48"
         />
@@ -132,11 +125,25 @@ export default function TeacherAttendancePage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        {(Object.entries(counts) as [Status, number][]).map(([status, count]) => (
-          <div key={status} className={cn("rounded-2xl p-4 border text-center", statusConfig[status].active)}>
-            <p className="text-2xl font-extrabold">{count}</p>
-            <p className="text-xs font-bold uppercase tracking-wider mt-1">{statusConfig[status].label}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {([
+          { status: "present" as Status, bg: "linear-gradient(135deg, #10B981, #059669)", icon: CheckCircle2 },
+          { status: "absent"  as Status, bg: "linear-gradient(135deg, #EF4444, #DC2626)", icon: XCircle },
+          { status: "late"    as Status, bg: "linear-gradient(135deg, #F59E0B, #D97706)", icon: Clock },
+        ]).map(({ status, bg, icon: Icon }) => (
+          <div
+            key={status}
+            className="rounded-2xl p-5 shadow-lg text-white relative overflow-hidden"
+            style={{ background: bg }}
+          >
+            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
+            <div className="relative z-10">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center mb-4">
+                <Icon size={22} className="text-white" />
+              </div>
+              <p className="text-3xl font-extrabold">{counts[status]}</p>
+              <p className="text-sm text-white/80 mt-1 font-medium">{statusConfig[status].label}</p>
+            </div>
           </div>
         ))}
       </div>
@@ -144,14 +151,9 @@ export default function TeacherAttendancePage() {
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-5">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-blue-500" />
-          </div>
+          <TableSkeleton cols={4} />
         ) : students.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <CalendarDays size={40} className="mb-3 opacity-30" />
-            <p className="font-medium">No students in this class</p>
-          </div>
+          <EmptyState icon={CalendarDays} title="No students in this class" />
         ) : (
           <table className="w-full">
             <thead>

@@ -45,7 +45,25 @@ export interface HomeworkSubmission {
   feedback?: string;
   submittedAt?: string;
   gradedAt?: string;
-  pupil?: StudentUser;
+  comment?: string;
+  pupil?: { firstName?: string; lastName?: string; user?: { firstName?: string; lastName?: string } };
+  student?: { firstName?: string; lastName?: string; user?: { firstName?: string; lastName?: string } };
+  user?: { firstName?: string; lastName?: string };
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface LessonProgressEntry {
+  id: string;
+  lessonId?: string;
+  pupilId?: string;
+  readAt?: string;
+  response?: string;
+  student?: { firstName?: string; lastName?: string; user?: { firstName?: string; lastName?: string } };
+  pupil?: { firstName?: string; lastName?: string; user?: { firstName?: string; lastName?: string } };
+  user?: { firstName?: string; lastName?: string };
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface Assessment {

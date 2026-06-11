@@ -1,19 +1,31 @@
-import { Bell, Menu, Search } from "lucide-react";
+import { Bell, Loader2, Menu, Search } from "lucide-react";
 import { resolveLogoUrl } from "@/lib/logo";
+import { Link } from "react-router-dom";
 import { Input } from "../ui/input";
+import { getUserAvatarSrc } from "@/lib/avatar";
+import { useUserStore } from "@/store/useUserStore";
+import { useOwnAvatarUpload } from "@/hooks/useOwnAvatarUpload";
+
 export default function Navbar({
   setSidebarOpen,
   setMobileSidebarOpen,
-  user,
-  school,
 }: {
   setSidebarOpen: (fn: (prev: boolean) => boolean) => void;
   setMobileSidebarOpen: (val: boolean) => void;
-  user: any;
-  school: any;
+  user?: any;
+  school?: any;
 }) {
-  // ✅ Use props directly — DashboardLayout handles the state
-  const logoSrc = resolveLogoUrl(school?.logoUrl);
+  const user   = useUserStore((s) => s.user);
+  const school = user?.school ?? null;
+
+  const avatarSrc     = getUserAvatarSrc(user);
+  const initials      = `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? ""}`.toUpperCase() || "?";
+  const isAdmin       = user?.role === "admin" || user?.role === "headmaster";
+  const schoolLogoSrc = isAdmin && school?.logoUrl
+    ? `${resolveLogoUrl(school.logoUrl)}?t=${school.logoUpdatedAt ?? 0}`
+    : null;
+
+  const { uploading, fileRef, handleChange } = useOwnAvatarUpload();
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100 h-20 flex items-center px-10">
@@ -52,26 +64,48 @@ export default function Navbar({
 
         <div className="h-10 w-[1px] bg-gray-100 hidden sm:block" />
 
-        <div className="flex items-center gap-4 group cursor-pointer">
-          <div className="text-right hidden sm:block">
+        <div className="flex items-center gap-4">
+          <Link to="/dashboard/profile" className="text-right hidden sm:block group">
             <p className="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors leading-tight">
               {user?.firstName} {user?.lastName}
             </p>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
               {user?.role || "Administrator"}
             </p>
-          </div>
+          </Link>
 
-          <div className="relative">
-            {logoSrc ? (
+          {/* Avatar — click to upload */}
+          <input
+            ref={fileRef}
+            type="file"
+            className="hidden"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleChange}
+          />
+          <div
+            className="relative cursor-pointer group"
+            onClick={() => fileRef.current?.click()}
+            title="Change profile photo"
+          >
+            {uploading ? (
+              <div className="w-11 h-11 rounded-2xl bg-indigo-100 flex items-center justify-center shadow-lg">
+                <Loader2 size={18} className="animate-spin text-indigo-500" />
+              </div>
+            ) : schoolLogoSrc ? (
               <img
-                src={logoSrc}
-                className="w-11 h-11 rounded-2xl object-cover ring-2 ring-transparent group-hover:ring-indigo-100 transition-all shadow-sm"
-                alt="School Logo"
+                src={schoolLogoSrc}
+                className="w-11 h-11 rounded-2xl object-cover ring-2 ring-transparent group-hover:ring-indigo-300 transition-all shadow-sm"
+                alt="School"
+              />
+            ) : avatarSrc ? (
+              <img
+                src={avatarSrc}
+                className="w-11 h-11 rounded-2xl object-cover ring-2 ring-transparent group-hover:ring-indigo-300 transition-all shadow-sm"
+                alt="Profile"
               />
             ) : (
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-sm font-black shadow-lg">
-                {user?.firstName?.[0]}{user?.lastName?.[0]}
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-sm font-black shadow-lg group-hover:ring-2 group-hover:ring-indigo-300 transition-all">
+                {initials}
               </div>
             )}
             <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm" />

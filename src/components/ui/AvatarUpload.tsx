@@ -44,7 +44,7 @@ export default function AvatarUpload({
       const fd = new FormData();
       fd.append("avatar", file);
       const res = await axiosClient.put(endpoint.replace(":id", userId), fd);
-      const url = `http://localhost:5000${res.data.avatarUrl}`;
+      const url = resolveAvatarUrl(res.data.avatarUrl);
       setPreview(url);
       onUpdated?.(res.data.avatarUrl);
       toast.success("Photo updated");

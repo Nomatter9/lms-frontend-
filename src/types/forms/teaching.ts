@@ -3,8 +3,9 @@ export interface LessonForm {
   termId: string;
   title: string;
   content: string;
-  videoUrl: string;
-  weekNumber: string;
+  dueDate: string;
+  maxMarks: string;
+  resourceLink: string;
   isPublished: boolean;
 }
 

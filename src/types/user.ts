@@ -26,3 +26,8 @@ export interface School {
   isVerified: boolean;
   createdAt: string;
 }
+
+export interface StoredUser extends User {
+  school?: School & { logoUpdatedAt?: number };
+  avatarUpdatedAt?: number;
+}

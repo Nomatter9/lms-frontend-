@@ -1,36 +1,32 @@
 import { useEffect, useState } from "react";
-import { Search, Loader2, GraduationCap, RefreshCw } from "lucide-react";
+import { Search, Loader2, GraduationCap, RefreshCw, Users, User } from "lucide-react";
 import TeacherLayout from "@/components/dashboard/TeacherLayout";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import axiosClient from "@/axiosClient";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useTeacherClasses } from "@/hooks/queries";
+import type { TeacherClass, TeacherStudent } from "@/types";
+
+type StudentWithParent = TeacherStudent & {
+  gender?: string;
+  parent?: { user?: { firstName?: string; lastName?: string }; firstName?: string; lastName?: string } | null;
+};
 
 export default function TeacherStudentsPage() {
-  const [classes, setClasses] = useState<any[]>([]);
+  const { data: classes = [] } = useTeacherClasses();
   const [selectedClass, setSelectedClass] = useState("");
-  const [students, setStudents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<StudentWithParent[]>([]);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    axiosClient.get("/teacher/classes")
-      .then(res => {
-        const list = Array.isArray(res.data) ? res.data : [];
-        setClasses(list);
-        if (list.length > 0) {
-          setSelectedClass(list[0].id);
-        } else {
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        toast.error("Failed to load classes");
-        setLoading(false);
-      });
-  }, []);
+    if (classes.length > 0 && !selectedClass) {
+      setSelectedClass(classes[0].id);
+    }
+  }, [classes]);
 
   useEffect(() => {
     if (!selectedClass) return;
@@ -41,36 +37,68 @@ export default function TeacherStudentsPage() {
       axiosClient.get("/auth/parents").catch(() => ({ data: [] })),
     ])
       .then(([studentsRes, parentsRes]) => {
-        const list: any[] = Array.isArray(studentsRes.data) ? studentsRes.data : [];
-        const parents: any[] = Array.isArray(parentsRes.data) ? parentsRes.data : [];
+        const list: StudentWithParent[] = Array.isArray(studentsRes.data) ? studentsRes.data : [];
+        const parents: Array<{ id: string; user?: { firstName?: string; lastName?: string }; firstName?: string; lastName?: string; parentId?: string }> =
+          Array.isArray(parentsRes.data) ? parentsRes.data : [];
         const parentMap = new Map(parents.map(p => [p.id, p]));
 
         setStudents(list.map(s => ({
           ...s,
-          parent: s.parent ?? parentMap.get(s.parentId) ?? null,
+          parent: (s as StudentWithParent & { parentId?: string }).parentId
+            ? (s.parent ?? parentMap.get((s as StudentWithParent & { parentId?: string }).parentId!) ?? null)
+            : s.parent ?? null,
         })));
       })
       .catch(() => toast.error("Failed to load students"))
       .finally(() => setLoading(false));
   }, [selectedClass, refreshKey]);
 
+  const maleCount   = students.filter(s => s.gender === "male").length;
+  const femaleCount = students.filter(s => s.gender === "female").length;
+
   const filtered = students.filter((s) =>
     `${s.user?.firstName} ${s.user?.lastName} ${s.regNumber || ""}`.toLowerCase().includes(search.toLowerCase())
   );
 
-  const studentFirst = (s: any) => s.user?.firstName ?? s.firstName ?? "";
-  const studentLast  = (s: any) => s.user?.lastName  ?? s.lastName  ?? "";
-  const parentName   = (s: any) => {
+  const studentFirst = (s: StudentWithParent) => s.user?.firstName ?? "";
+  const studentLast  = (s: StudentWithParent) => s.user?.lastName  ?? "";
+  const parentName   = (s: StudentWithParent) => {
     const p = s.parent;
     if (!p) return null;
     const first = p.user?.firstName ?? p.firstName ?? "";
     const last  = p.user?.lastName  ?? p.lastName  ?? "";
     return `${first} ${last}`.trim() || null;
   };
-  const initials = (s: any) => `${studentFirst(s)[0] || ""}${studentLast(s)[0] || ""}`.toUpperCase();
+  const initials = (s: StudentWithParent) => `${studentFirst(s)[0] || ""}${studentLast(s)[0] || ""}`.toUpperCase();
 
   return (
     <TeacherLayout title="My Students" subtitle="View all students in your classes">
+
+      {/* Stats */}
+      {!loading && students.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          {[
+            { label: "Total Students", value: students.length, bg: "linear-gradient(135deg, #10B981, #059669)", icon: GraduationCap },
+            { label: "Male",           value: maleCount,       bg: "linear-gradient(135deg, #3B82F6, #06B6D4)", icon: Users },
+            { label: "Female",         value: femaleCount,     bg: "linear-gradient(135deg, #EC4899, #DB2777)", icon: User },
+          ].filter(s => s.value > 0).map(({ label, value, bg, icon: Icon }) => (
+            <div
+              key={label}
+              className="rounded-2xl p-5 shadow-lg text-white relative overflow-hidden"
+              style={{ background: bg }}
+            >
+              <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
+              <div className="relative z-10">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center mb-4">
+                  <Icon size={22} className="text-white" />
+                </div>
+                <p className="text-3xl font-extrabold">{value}</p>
+                <p className="text-sm text-white/80 mt-1 font-medium">{label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <Select value={selectedClass} onValueChange={setSelectedClass}>
@@ -78,7 +106,7 @@ export default function TeacherStudentsPage() {
             <SelectValue placeholder="Select class" />
           </SelectTrigger>
           <SelectContent position="popper">
-            {classes.map((c) => (
+            {classes.map((c: TeacherClass) => (
               <SelectItem key={c.id} value={c.id}>
                 {c.grade?.label} {c.name}
               </SelectItem>
@@ -146,11 +174,11 @@ export default function TeacherStudentsPage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-gray-800">{studentFirst(s)} {studentLast(s)}</p>
-                          <p className="text-xs text-gray-400">{s.user?.email ?? s.email ?? "—"}</p>
+                          <p className="text-xs text-gray-400">{s.user?.email ?? "—"}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-3.5 text-sm text-gray-500">{s.regNumber || s.reg_number || "—"}</td>
+                    <td className="px-6 py-3.5 text-sm text-gray-500">{s.regNumber || "—"}</td>
                     <td className="px-6 py-3.5">
                       {s.gender ? (
                         <span className={cn(

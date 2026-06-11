@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   School, Mail, Phone, MapPin, Map,
-  Upload, Save, Loader2, CheckCircle2, ShieldAlert, X
+  Upload, Save, Loader2, CheckCircle2, ShieldAlert,
 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import axiosClient from "@/axiosClient";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { resolveLogoUrl } from "@/lib/logo";
+import { useUserStore } from "@/store/useUserStore";
 import type { School as SchoolType } from "@/types";
 import type { SchoolProfileForm } from "@/types/forms";
 
@@ -19,6 +20,9 @@ const EMPTY_FORM: SchoolProfileForm = {
 };
 
 export default function SchoolProfilePage() {
+  const storeUser = useUserStore((s) => s.user);
+  const setUser = useUserStore((s) => s.setUser);
+
   const [school, setSchool] = useState<SchoolType | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,36 +30,21 @@ export default function SchoolProfilePage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [dragActive, setDragActive] = useState(false);
   const [form, setForm] = useState<SchoolProfileForm>(EMPTY_FORM);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // ─── Prevent browser default drag/drop ───────────────────
-  useEffect(() => {
-    const preventDefault = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    window.addEventListener("dragover", preventDefault);
-    window.addEventListener("drop", preventDefault);
-    return () => {
-      window.removeEventListener("dragover", preventDefault);
-      window.removeEventListener("drop", preventDefault);
-    };
-  }, []);
 
   // ─── Fetch school ─────────────────────────────────────────
   const fetchSchool = async () => {
     try {
       const res = await axiosClient.get("/auth/school/me");
-      const data: SchoolType = res.data;
+      const data: SchoolType = res.data?.school ?? res.data;
       setSchool(data);
       setForm({
-        name: data.name || "",
-        email: data.email || "",
-        phone: data.phone || "",
-        address: data.address || "",
+        name:     data.name     || "",
+        email:    data.email    || "",
+        phone:    data.phone    || "",
+        address:  data.address  || "",
         province: data.province || "",
       });
       if (data.logoUrl) setLogoPreview(resolveLogoUrl(data.logoUrl));
@@ -68,72 +57,57 @@ export default function SchoolProfilePage() {
 
   useEffect(() => { fetchSchool(); }, []);
 
-  // ─── Cleanup blob URLs on unmount ─────────────────────────
   useEffect(() => {
-    return () => {
-      if (logoPreview?.startsWith("blob:")) URL.revokeObjectURL(logoPreview);
-    };
+    return () => { if (logoPreview?.startsWith("blob:")) URL.revokeObjectURL(logoPreview); };
   }, [logoPreview]);
 
-  // ─── File validation ──────────────────────────────────────
-  const handleFile = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Only image files are allowed");
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Max file size is 2MB");
-      return;
-    }
+  // ─── Logo file staging ────────────────────────────────────
+  const stageLogo = (file: File) => {
+    if (!file.type.startsWith("image/")) { toast.error("Only image files are allowed"); return; }
+    if (file.size > 2 * 1024 * 1024)    { toast.error("Max file size is 2 MB"); return; }
     if (logoPreview?.startsWith("blob:")) URL.revokeObjectURL(logoPreview);
     setLogoFile(file);
     setLogoPreview(URL.createObjectURL(file));
   };
 
-  // ─── Drag & drop handlers ─────────────────────────────────
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); e.stopPropagation(); setDragActive(true);
-  };
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); e.stopPropagation(); setDragActive(true);
-  };
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); e.stopPropagation();
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragActive(false);
-  };
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); e.stopPropagation();
-    setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
-  };
-
   // ─── Save ─────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!form.name || !form.email || !form.phone || !form.address || !form.province) {
-      setErrorMessage("All fields are required");
+    if (!form.name.trim() || !form.email.trim()) {
+      toast.error("School name and email are required");
       return;
     }
     setSaving(true);
     setSuccessMessage(null);
     setErrorMessage(null);
     try {
-      const formData = new FormData();
-      Object.entries(form).forEach(([key, value]) => formData.append(key, value));
-      if (logoFile) formData.append("logo", logoFile);
+      await axiosClient.put("/auth/school/me", {
+        name:     form.name.trim(),
+        email:    form.email.trim(),
+        phone:    form.phone.trim(),
+        address:  form.address.trim(),
+        province: form.province.trim(),
+      });
 
-      const res = await axiosClient.put("/auth/school/me", formData);
-      const updatedSchool: SchoolType = res.data;
+      if (logoFile) {
+        try {
+          const fd = new FormData();
+          fd.append("logo", logoFile);
+          await axiosClient.put("/auth/school/me/logo", fd);
+          setLogoFile(null);
+        } catch {
+          toast.error("Profile saved but logo upload failed");
+        }
+      }
 
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      localStorage.setItem("user", JSON.stringify({ ...user, school: updatedSchool }));
-      window.dispatchEvent(new Event("user-updated"));
+      // Re-fetch to get the definitive school state (avoids guessing response shapes)
+      const freshRes = await axiosClient.get("/auth/school/me");
+      const updatedSchool: SchoolType = freshRes.data?.school ?? freshRes.data;
+
+      const mergedUser = { ...storeUser, school: { ...updatedSchool, logoUpdatedAt: Date.now() } };
+      setUser(mergedUser);
 
       setSchool(updatedSchool);
-      if (updatedSchool.logoUrl) {
-        setLogoPreview(resolveLogoUrl(updatedSchool.logoUrl));
-        setLogoFile(null);
-      }
+      if (updatedSchool.logoUrl) setLogoPreview(resolveLogoUrl(updatedSchool.logoUrl));
       setSuccessMessage("School profile updated successfully!");
       toast.success("Profile updated!");
     } catch (err: any) {
@@ -174,62 +148,11 @@ export default function SchoolProfilePage() {
         )}
 
         {/* ── Banner ── */}
-        <div className="bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] rounded-3xl p-8 text-white relative shadow-xl shadow-indigo-100">
-          <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-
-            {/* Logo drop zone */}
-            <div
-              onClick={() => !logoPreview && fileInputRef.current?.click()}
-              onDragEnter={handleDragEnter}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={cn(
-                "relative w-28 h-28 rounded-2xl border-2 border-dashed shrink-0 transition-all duration-200 group",
-                !logoPreview && "cursor-pointer",
-                dragActive
-                  ? "border-white bg-white/30 scale-105"
-                  : "border-white/30 bg-white/10 hover:bg-white/20"
-              )}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFile(file);
-                  e.target.value = "";
-                }}
-              />
-
-              {logoPreview ? (
-                <>
-                  <img
-                    src={logoPreview}
-                    alt="School Logo"
-                    className="w-full h-full object-cover rounded-2xl pointer-events-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setLogoPreview(null); setLogoFile(null); }}
-                    className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-rose-500 flex items-center justify-center hover:bg-rose-600 transition-colors z-10 shadow-md opacity-0 group-hover:opacity-100"
-                  >
-                    <X size={12} className="text-white" />
-                  </button>
-                </>
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pointer-events-none">
-                  <Upload size={24} className="text-white/70" />
-                  <span className="text-[10px] text-white/60 text-center leading-tight px-1 font-medium">
-                    {dragActive ? "Drop here!" : "Drop or click"}
-                  </span>
-                </div>
-              )}
+        <div className="bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] rounded-3xl p-8 text-white shadow-xl shadow-indigo-100">
+          <div className="flex flex-col md:flex-row items-center gap-6">
+            <div className="w-20 h-20 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+              <School size={36} className="text-white/70" />
             </div>
-
-            {/* School info */}
             <div className="text-center md:text-left space-y-1">
               <h2 className="text-2xl font-black tracking-tight">{school?.name || "Your School"}</h2>
               <p className="text-indigo-100/80 font-medium">{school?.email}</p>
@@ -259,6 +182,45 @@ export default function SchoolProfilePage() {
             <div>
               <h3 className="font-bold text-gray-900">Institution Details</h3>
               <p className="text-xs text-gray-400 font-medium uppercase tracking-tight">Manage public information</p>
+            </div>
+          </div>
+
+          {/* ── Logo upload ── */}
+          <div className="mb-8 pb-8 border-b border-gray-100">
+            <Label className="text-xs font-bold text-gray-500 ml-1 mb-4 block">SCHOOL LOGO</Label>
+            <div className="flex items-center gap-5">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="relative w-20 h-20 rounded-2xl overflow-hidden bg-gray-100 border-2 border-gray-200 hover:border-indigo-400 cursor-pointer transition-colors group shrink-0"
+              >
+                {logoPreview
+                  ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center"><School size={28} className="text-gray-400" /></div>
+                }
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Upload size={16} className="text-white" />
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-700">
+                  {logoFile ? logoFile.name : "No logo selected"}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">PNG, JPG or WEBP · max 2 MB</p>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                >
+                  {logoPreview ? "Change logo" : "Upload logo"}
+                </button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) stageLogo(f); e.target.value = ""; }}
+              />
             </div>
           </div>
 

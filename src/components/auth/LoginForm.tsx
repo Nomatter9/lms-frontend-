@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import axios from "axios";
 import { cn } from "@/lib/utils";
+import { useUserStore } from "@/store/useUserStore";
 
 export default function LoginForm() {
   const navigate = useNavigate();
+  const setUser = useUserStore((s) => s.setUser);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -40,9 +42,9 @@ const onSubmit = async (data: LoginFormValues) => {
     if (res.status >= 200 && res.status < 300) {
       const user = res.data.user;        
 
-     localStorage.setItem("token", JSON.stringify(res.data.token));
-      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("token", JSON.stringify(res.data.token));
       localStorage.setItem("role", user.role);
+      setUser(user);
 
       if (user) {
         navigate("/dashboard", { replace: true });

@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BookOpen, Users, ClipboardList, GraduationCap,
-  ArrowUpRight, CalendarDays, 
+  ArrowUpRight, CalendarDays,
 } from "lucide-react";
 import TeacherLayout from "@/components/dashboard/TeacherLayout";
 import axiosClient from "@/axiosClient";
+import { toast } from "sonner";
 
 const getGreeting = () => {
   const h = new Date().getHours();
@@ -14,15 +15,34 @@ const getGreeting = () => {
   return "Good evening";
 };
 
+interface OverviewData {
+  myClasses: number;
+  mySubjects: number;
+  totalStudents: number;
+  pendingHomework: number;
+  classes: Array<{
+    id: string;
+    name: string;
+    grade?: { label: string };
+    academicYear?: { year: string };
+    students?: { id: string }[];
+  }>;
+  subjects: Array<{
+    id: string;
+    subject?: { name: string };
+    class?: { grade?: { label: string }; name?: string };
+  }>;
+}
+
 export default function TeacherOverviewPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   useEffect(() => {
     axiosClient.get("/teacher/overview")
       .then(res => setData(res.data))
-      .catch(() => {})
+      .catch(() => toast.error("Failed to load overview"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -31,6 +51,15 @@ export default function TeacherOverviewPage() {
     { label: "My Subjects", value: data?.mySubjects ?? "—", icon: GraduationCap, gradient: "linear-gradient(135deg, #10B981, #059669)" },
     { label: "Total Students", value: data?.totalStudents ?? "—", icon: Users, gradient: "linear-gradient(135deg, #F59E0B, #EF4444)" },
     { label: "Active Homework", value: data?.pendingHomework ?? "—", icon: ClipboardList, gradient: "linear-gradient(135deg, #3B82F6, #06B6D4)" },
+  ];
+
+  const CARD_COLORS = [
+    "linear-gradient(135deg, #6366F1, #8B5CF6)",
+    "linear-gradient(135deg, #10B981, #059669)",
+    "linear-gradient(135deg, #3B82F6, #06B6D4)",
+    "linear-gradient(135deg, #F59E0B, #D97706)",
+    "linear-gradient(135deg, #EC4899, #DB2777)",
+    "linear-gradient(135deg, #8B5CF6, #7C3AED)",
   ];
 
   const quickLinks = [
@@ -44,7 +73,7 @@ export default function TeacherOverviewPage() {
   return (
     <TeacherLayout
       title={`${getGreeting()}, ${user?.firstName} 👋`}
-      subtitle="Welcome to your teaching dashboard"
+      subtitle="Welcome to your Teacher Dashboard"
     >
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -112,26 +141,28 @@ export default function TeacherOverviewPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {data.classes.map((cls: any) => (
+              {data.classes.map((cls, i: number) => (
                 <Link
                   key={cls.id}
                   to={`/dashboard/teacher/students?classId=${cls.id}`}
-                  className="p-4 rounded-xl border border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/50 transition-all group"
+                  className="p-4 rounded-xl relative overflow-hidden text-white shadow-md hover:shadow-lg hover:scale-[1.02] transition-all"
+                  style={{ background: CARD_COLORS[i % CARD_COLORS.length] }}
                 >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
-                      <BookOpen size={15} className="text-emerald-600" />
+                  <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full bg-white/10" />
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                        <BookOpen size={15} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-white">{cls.grade?.label} {cls.name}</p>
+                        <p className="text-xs text-white/70">{cls.academicYear?.year}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-800 group-hover:text-emerald-700">
-                        {cls.grade?.label} {cls.name}
-                      </p>
-                      <p className="text-xs text-gray-400">{cls.academicYear?.year}</p>
+                    <div className="flex items-center gap-1.5 text-xs text-white/70">
+                      <Users size={11} />
+                      <span>{cls.students?.length || 0} students</span>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <Users size={11} />
-                    <span>{cls.students?.length || 0} students</span>
                   </div>
                 </Link>
               ))}
@@ -145,10 +176,15 @@ export default function TeacherOverviewPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <h2 className="font-bold text-gray-900 mb-4">My Subjects</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {data.subjects.map((s: any) => (
-              <div key={s.id} className="p-4 rounded-xl bg-[#F4F7FE] border border-gray-100">
-                <p className="text-sm font-bold text-gray-800">{s.subject?.name}</p>
-                <p className="text-xs text-gray-400 mt-1">
+            {data.subjects.map((s, i: number) => (
+              <div
+                key={s.id}
+                className="p-4 rounded-xl relative overflow-hidden text-white shadow-md"
+                style={{ background: CARD_COLORS[i % CARD_COLORS.length] }}
+              >
+                <div className="absolute -right-3 -top-3 w-14 h-14 rounded-full bg-white/10" />
+                <p className="text-sm font-bold text-white relative z-10">{s.subject?.name}</p>
+                <p className="text-xs text-white/70 mt-1 relative z-10">
                   {s.class?.grade?.label} {s.class?.name}
                 </p>
               </div>

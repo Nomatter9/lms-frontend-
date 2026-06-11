@@ -1,11 +1,13 @@
 import { Link, useLocation } from "react-router-dom";
+import { useUserStore } from "@/store/useUserStore";
 import {
   LayoutDashboard, Users, BookOpen, GraduationCap,
   Calendar, Settings, BarChart3, Layers, LogOut,
   School, X, UserCheck, ClipboardList, CalendarCheck,
-  TrendingUp, BookMarked, 
+  TrendingUp, BookMarked, UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { resolveLogoUrl } from "@/lib/logo";
 
 // ─── Nav config per role ──────────────────────────────────────
 const NAV_BY_ROLE: Record<string, {
@@ -61,6 +63,12 @@ const NAV_BY_ROLE: Record<string, {
         { icon: TrendingUp,      label: "Assessments",   href: "/dashboard/teacher/assessments" },
       ],
     },
+    {
+      label: "Account",
+      items: [
+        { icon: UserCircle,      label: "My Profile",    href: "/dashboard/profile" },
+      ],
+    },
   ],
 
   // ── Parent ──────────────────────────────────────────────────
@@ -70,6 +78,12 @@ const NAV_BY_ROLE: Record<string, {
       items: [
         { icon: LayoutDashboard, label: "Overview",      href: "/dashboard" },
         { icon: GraduationCap,   label: "My Children",   href: "/dashboard/parent/children" },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { icon: UserCircle,      label: "My Profile",    href: "/dashboard/profile" },
       ],
     },
   ],
@@ -86,9 +100,16 @@ const NAV_BY_ROLE: Record<string, {
       label: "My Learning",
       items: [
         { icon: BookOpen,        label: "My Subjects",   href: "/dashboard/student/subjects" },
+        { icon: BookMarked,      label: "Lessons",       href: "/dashboard/student/lessons" },
         { icon: ClipboardList,   label: "Homework",      href: "/dashboard/student/homework" },
         { icon: TrendingUp,      label: "My Results",    href: "/dashboard/student/results" },
         { icon: CalendarCheck,   label: "Attendance",    href: "/dashboard/student/attendance" },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { icon: UserCircle,      label: "My Profile",    href: "/dashboard/profile" },
       ],
     },
   ],
@@ -107,18 +128,26 @@ const PORTAL_LABEL: Record<string, string> = {
 };
 
 // ─── Component ────────────────────────────────────────────────
+interface SidebarProps {
+  sidebarOpen: boolean;
+  mobileSidebarOpen: boolean;
+  setMobileSidebarOpen: (open: boolean) => void;
+  handleLogout: () => void;
+}
+
 export default function Sidebar({
   sidebarOpen,
   mobileSidebarOpen,
   setMobileSidebarOpen,
   handleLogout,
-  school,
-}: any)
- {
+}: SidebarProps) {
   const location = useLocation();
-  const role = localStorage.getItem("role") || "headmaster";
-  const navGroups = NAV_BY_ROLE[role] || NAV_BY_ROLE['headmaster'];
+  const role = useUserStore((s) => s.user?.role) ?? localStorage.getItem("role") ?? "headmaster";
+  const navGroups = NAV_BY_ROLE[role] ?? NAV_BY_ROLE['headmaster'];
   const portalLabel = PORTAL_LABEL[role] || "Portal";
+
+  const school = useUserStore((s) => s.user?.school ?? null);
+
 
   return (
     <aside className={cn(
@@ -133,8 +162,11 @@ export default function Sidebar({
         !sidebarOpen && "justify-center px-0"
       )}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
-            <School size={20} className="text-white" />
+          <div className="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20 overflow-hidden">
+            {school?.logoUrl
+              ? <img src={`${resolveLogoUrl(school.logoUrl)}?t=${school.logoUpdatedAt ?? 0}`} alt="logo" className="w-full h-full object-cover" />
+              : <School size={20} className="text-white" />
+            }
           </div>
 
           {sidebarOpen && (

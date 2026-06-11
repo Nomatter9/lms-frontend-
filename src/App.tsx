@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // ─── Auth ─────────────────────────────────────────────────────
 import LoginPage from '@/pages/auth/LoginPage';
@@ -30,12 +31,16 @@ import TeacherAssessmentsPage from '@/pages/teacher/TeacherAssessmentsPage';
 
 // ─── Student ──────────────────────────────────────────────────
 import StudentSubjectsPage from '@/pages/student/StudentSubjectsPage';
+import StudentLessonsPage from '@/pages/student/StudentLessonsPage';
 import StudentHomeworkPage from '@/pages/student/StudentHomeworkPage';
 import StudentResultsPage from '@/pages/student/StudentResultsPage';
 import StudentAttendancePage from '@/pages/student/StudentAttendancePage';
 
 // ─── Parent ───────────────────────────────────────────────────
 import ParentChildrenPage from '@/pages/parent/ParentChildrenPage';
+
+// ─── Profile ──────────────────────────────────────────────────
+import ProfilePage from '@/pages/profile/ProfilePage';
 
 // ─── Role Constants ───────────────────────────────────────────
 const ADMIN_ROLES = ['admin', 'headmaster'];
@@ -67,7 +72,7 @@ function ProtectedRoute({
     );
   }
 
-  return <>{children}</>;
+  return <ErrorBoundary>{children}</ErrorBoundary>;
 }
 
 function GuestRoute({ children }: { children: ReactNode }) {
@@ -145,6 +150,9 @@ export default function App() {
         <Route path="/dashboard/student/subjects" element={
           <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentSubjectsPage /></ProtectedRoute>
         } />
+        <Route path="/dashboard/student/lessons" element={
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentLessonsPage /></ProtectedRoute>
+        } />
         <Route path="/dashboard/student/homework" element={
           <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentHomeworkPage /></ProtectedRoute>
         } />
@@ -158,6 +166,11 @@ export default function App() {
         {/* ── Parent only ── */}
         <Route path="/dashboard/parent/children" element={
           <ProtectedRoute allowedRoles={PARENT_ROLES}><ParentChildrenPage /></ProtectedRoute>
+        } />
+
+        {/* ── Profile — all authenticated roles ── */}
+        <Route path="/dashboard/profile" element={
+          <ProtectedRoute><ProfilePage /></ProtectedRoute>
         } />
 
         {/* ── 404 ── */}

@@ -20,7 +20,11 @@ axiosClient.interceptors.request.use(
       }
     }
 
-    // 🔥 LET AXIOS DECIDE CONTENT-TYPE
+    // Let axios set Content-Type automatically (critical for FormData multipart boundary)
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

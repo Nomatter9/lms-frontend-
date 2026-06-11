@@ -1,28 +1,37 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard, Users, BookOpen, ClipboardList,
   CalendarDays, GraduationCap, LogOut, Menu, X,
-  School, ChevronDown, Bell, Search
+  School, Bell, Search, Loader2, UserCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import axiosClient from "@/axiosClient";
+import { getUserAvatarSrc } from "@/lib/avatar";
+import { useUserStore } from "@/store/useUserStore";
+import { useOwnAvatarUpload } from "@/hooks/useOwnAvatarUpload";
 
 const NAV_GROUPS = [
   {
     label: "Main",
     items: [
-      { icon: LayoutDashboard, label: "Overview", href: "/dashboard/teacher" },
-      { icon: Users, label: "My Students", href: "/dashboard/teacher/students" },
+      { icon: LayoutDashboard, label: "Overview",    href: "/dashboard" },
+      { icon: Users,           label: "My Students", href: "/dashboard/teacher/students" },
     ]
   },
   {
     label: "Teaching",
     items: [
-      { icon: BookOpen, label: "Lessons", href: "/dashboard/teacher/lessons" },
-      { icon: ClipboardList, label: "Homework", href: "/dashboard/teacher/homework" },
-      { icon: CalendarDays, label: "Attendance", href: "/dashboard/teacher/attendance" },
+      { icon: BookOpen,      label: "Lessons",     href: "/dashboard/teacher/lessons" },
+      { icon: ClipboardList, label: "Homework",    href: "/dashboard/teacher/homework" },
+      { icon: CalendarDays,  label: "Attendance",  href: "/dashboard/teacher/attendance" },
       { icon: GraduationCap, label: "Assessments", href: "/dashboard/teacher/assessments" },
+    ]
+  },
+  {
+    label: "Account",
+    items: [
+      { icon: UserCircle, label: "My Profile", href: "/dashboard/profile" },
     ]
   },
 ];
@@ -34,24 +43,25 @@ interface TeacherLayoutProps {
 }
 
 export default function TeacherLayout({ children, title, subtitle }: TeacherLayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen,       setSidebarOpen]       = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "{}"));
+
+  const user      = useUserStore((s) => s.user);
+  const clearUser = useUserStore((s) => s.clearUser);
+
+  const school   = user?.school;
+  const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase() || "?";
+  const avatarSrc = getUserAvatarSrc(user);
+
+  const { uploading, fileRef, handleChange } = useOwnAvatarUpload();
+
   const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    const handleUpdate = () => setUser(JSON.parse(localStorage.getItem("user") || "{}"));
-    window.addEventListener("user-updated", handleUpdate);
-    return () => window.removeEventListener("user-updated", handleUpdate);
-  }, []);
-
-  const school = user?.school;
-  const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase();
 
   const handleLogout = async () => {
     try { await axiosClient.post("/auth/logout"); } catch {}
     localStorage.clear();
+    clearUser();
     navigate("/login");
   };
 
@@ -131,35 +141,18 @@ export default function TeacherLayout({ children, title, subtitle }: TeacherLayo
           ))}
         </nav>
 
-        {/* User */}
-        <div className={cn("p-3 border-t border-white/10 shrink-0", !sidebarOpen && "px-2")}>
-          {sidebarOpen ? (
-            <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/10 transition-colors cursor-pointer">
-              <div className="w-8 h-8 rounded-xl bg-[#10B981] flex items-center justify-center text-white text-xs font-bold shrink-0">
-                {initials}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-[11px] text-[#A3AED0] capitalize">{user?.role}</p>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="text-[#A3AED0] hover:text-rose-400 transition-colors p-1 rounded-lg hover:bg-rose-500/10"
-                title="Logout"
-              >
-                <LogOut size={15} />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center p-2.5 rounded-xl text-[#A3AED0] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-            >
-              <LogOut size={18} />
-            </button>
-          )}
+        {/* Logout */}
+        <div className={cn("p-3 border-t border-white/10 shrink-0", !sidebarOpen && "flex justify-center")}>
+          <button
+            onClick={handleLogout}
+            className={cn(
+              "flex items-center gap-3 w-full p-3 rounded-xl text-[#A3AED0] hover:bg-rose-500/10 hover:text-rose-400 transition-colors",
+              !sidebarOpen && "justify-center w-auto"
+            )}
+          >
+            <LogOut size={18} className="shrink-0" />
+            {sidebarOpen && <span className="text-sm font-bold">Log Out</span>}
+          </button>
         </div>
       </aside>
 
@@ -195,17 +188,40 @@ export default function TeacherLayout({ children, title, subtitle }: TeacherLayo
               <span className="absolute top-2 right-2 w-2 h-2 bg-[#10B981] rounded-full ring-2 ring-white" />
             </button>
             <div className="h-8 w-px bg-gray-200" />
-            <div className="flex items-center gap-2.5 cursor-pointer">
-              <div className="w-9 h-9 rounded-xl bg-[#10B981] flex items-center justify-center text-white text-xs font-bold shadow-md shadow-emerald-500/20">
-                {initials}
-              </div>
-              <div className="hidden sm:block">
-                <p className="text-sm font-semibold text-gray-800 leading-tight">
+
+            <div className="flex items-center gap-3">
+              <Link to="/dashboard/profile" className="hidden sm:block">
+                <p className="text-sm font-semibold text-gray-800 leading-tight hover:text-[#10B981] transition-colors">
                   {user?.firstName} {user?.lastName}
                 </p>
                 <p className="text-[11px] text-gray-400 capitalize">{user?.role}</p>
+              </Link>
+
+              {/* Avatar — click to upload */}
+              <input
+                ref={fileRef}
+                type="file"
+                className="hidden"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleChange}
+              />
+              <div
+                className="relative cursor-pointer group"
+                onClick={() => fileRef.current?.click()}
+                title="Change profile photo"
+              >
+                {uploading ? (
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
+                    <Loader2 size={15} className="animate-spin text-[#10B981]" />
+                  </div>
+                ) : avatarSrc ? (
+                  <img src={avatarSrc} alt="Avatar" className="w-9 h-9 rounded-xl object-cover shadow-md group-hover:ring-2 group-hover:ring-[#10B981]/50 transition-all" />
+                ) : (
+                  <div className="w-9 h-9 rounded-xl bg-[#10B981] flex items-center justify-center text-white text-xs font-bold shadow-md shadow-emerald-500/20 group-hover:ring-2 group-hover:ring-[#10B981]/50 transition-all">
+                    {initials}
+                  </div>
+                )}
               </div>
-              <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
             </div>
           </div>
         </header>

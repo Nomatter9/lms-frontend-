@@ -1,4 +1,4 @@
-export type { User, School, UserRole } from './user';
+export type { User, School, UserRole, StoredUser } from './user';
 export type { Grade, AcademicYear, Term, Subject } from './academic';
 export type { ClassItem, ClassSubject } from './class';
 export type {
@@ -16,7 +16,7 @@ export type {
 } from './student';
 export type { StaffMember } from './staffMember';
 export type {
-  Lesson, Homework, HomeworkSubmission,
+  Lesson, Homework, HomeworkSubmission, LessonProgressEntry,
   Assessment, AssessmentResult, Attendance,
 } from './teaching';
 export type {
