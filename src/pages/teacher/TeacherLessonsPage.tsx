@@ -101,10 +101,13 @@ export default function TeacherLessonsPage() {
     setModalOpen(true);
   }, [terms]);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
-    if (!isLoading && searchParams.get("open") === "create") openCreate();
-  }, [isLoading, searchParams, openCreate]);
+    if (!isLoading && searchParams.get("open") === "create") {
+      openCreate();
+      setSearchParams({}, { replace: true });
+    }
+  }, [isLoading, searchParams, openCreate, setSearchParams]);
 
   const openEdit = (lesson: Lesson) => {
     setEditTarget(lesson);

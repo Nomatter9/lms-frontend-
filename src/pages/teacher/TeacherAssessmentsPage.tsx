@@ -50,10 +50,13 @@ export default function TeacherAssessmentsPage() {
     setModalOpen(true);
   }, []);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
-    if (!isLoading && searchParams.get("open") === "create") openCreate();
-  }, [isLoading, searchParams, openCreate]);
+    if (!isLoading && searchParams.get("open") === "create") {
+      openCreate();
+      setSearchParams({}, { replace: true });
+    }
+  }, [isLoading, searchParams, openCreate, setSearchParams]);
 
   const openEdit = (a: Assessment) => {
     setEditTarget(a);

@@ -144,10 +144,13 @@ useEffect(() => {
     setModalOpen(true);
   }, [currentTermId]);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
-    if (!isLoading && searchParams.get("open") === "create") openCreate();
-  }, [isLoading, searchParams, openCreate]);
+    if (!isLoading && searchParams.get("open") === "create") {
+      openCreate();
+      setSearchParams({}, { replace: true });
+    }
+  }, [isLoading, searchParams, openCreate, setSearchParams]);
 
  const openEdit = (hw: Homework) => {
   setEditTarget(hw);
